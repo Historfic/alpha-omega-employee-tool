@@ -216,3 +216,11 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Generated outputs — keep the folder, ignore its contents
+output/*
+!output/.gitkeep
+
+# Service account credentials — never commit
+config/credentials.json
+config/*.json

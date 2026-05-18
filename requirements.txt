@@ -1,0 +1,21 @@
+# Runtime dependencies
+python-dotenv
+
+# Google Sheets access
+google-api-python-client
+google-auth
+google-auth-oauthlib
+gspread
+
+# QR + PDF generation
+qrcode[pil]
+reportlab
+
+# Report rendering
+jinja2
+
+# Data handling
+pandas
+
+# Dev / test
+pytest
