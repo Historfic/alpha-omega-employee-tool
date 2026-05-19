@@ -38,17 +38,35 @@ See [docs/setup.md](docs/setup.md) for the Google Cloud / service-account walkth
 
 ## Usage
 
-> _TODO: fill in once CLI is wired up._
+Two entry points — pick whichever you prefer. They accept the same flags.
 
 ```bash
-# Generate QR code PDF
-python -m src.qr_generator
+# Top-level dispatcher
+python main.py qr [--csv PATH] [-o OUT] [-v]
+python main.py report [--time-log PATH] [--employees PATH] [-o OUT] [-v]
 
-# Generate weekly time report
-python -m src.time_reporter
+# Or run each module directly
+python -m src.qr_generator --help
+python -m src.time_reporter --help
 ```
 
+Common flags:
+
+| Flag | Purpose |
+|---|---|
+| `--csv` / `--time-log` / `--employees` | Override the input CSV path |
+| `-o` / `--output` | Override the output path |
+| `-v` / `--verbose` | Debug-level logging |
+| `-h` / `--help` | Show usage and exit |
+
+Defaults read from env vars (`EMPLOYEES_CSV`, `TIME_LOG_CSV`,
+`QR_PDF_OUTPUT`, `REPORT_HTML_OUTPUT`) if set, otherwise from the paths
+documented in `.env.example`.
+
 Outputs land in [output/](output/) (gitignored).
+
+**Exit codes**: `0` success, `1` unexpected runtime error, `2` bad input
+(missing/empty file).
 
 ## Project Layout
 
