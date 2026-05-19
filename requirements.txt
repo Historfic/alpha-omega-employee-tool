@@ -1,21 +1,24 @@
+# Pinned to the versions tested against for v1.0.0.
+# Bump deliberately, not casually — rerun pytest after any change.
+
 # Runtime dependencies
-python-dotenv
+python-dotenv==1.2.2
 
 # Google Sheets access
-google-api-python-client
-google-auth
-google-auth-oauthlib
-gspread
+google-api-python-client==2.196.0
+google-auth==2.53.0
+google-auth-oauthlib==1.4.0
+gspread==6.2.1
 
 # QR + PDF generation
-qrcode[pil]
-reportlab
+qrcode[pil]==8.2
+reportlab==4.5.1
 
 # Report rendering
-jinja2
+jinja2==3.1.6
 
 # Data handling
-pandas
+pandas==3.0.3
 
 # Dev / test
-pytest
+pytest==9.0.3
