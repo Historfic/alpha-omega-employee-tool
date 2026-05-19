@@ -45,6 +45,81 @@ def _hours_between(clock_in: str, clock_out: str) -> float:
     return round(delta_min / 60.0, 2)
 
 
+def _normalize_date(value: str) -> str:
+    """Accept either ISO (YYYY-MM-DD) or US (MM/DD/YYYY) — return ISO."""
+    s = value.strip()
+    for fmt in ("%Y-%m-%d", "%m/%d/%Y"):
+        try:
+            return datetime.strptime(s, fmt).strftime("%Y-%m-%d")
+        except ValueError:
+            continue
+    raise ValueError(f"unrecognized date format: {value!r}")
+
+
+def _normalize_time(value: str) -> str:
+    """Accept 24h ('17:05') or 12h with AM/PM ('5:05 PM') — return 24h HH:MM."""
+    s = value.strip().upper().replace(".", "")  # tolerate 'A.M.' / 'P.M.'
+    for fmt in ("%H:%M", "%I:%M %p", "%I:%M%p"):
+        try:
+            return datetime.strptime(s, fmt).strftime("%H:%M")
+        except ValueError:
+            continue
+    raise ValueError(f"unrecognized time format: {value!r}")
+
+
+def load_time_log_sheet(
+    client,
+    spreadsheet_id: str,
+    gid: int | None,
+    employees: list[dict[str, str]],
+) -> tuple[list[dict[str, str]], int]:
+    """Fetch the Practice 1 time log from a Google Sheet and adapt it.
+
+    Practice 1 columns:  Date | Employee | Time_in | Time_out | Total_hours
+    Internal shape:      employee_id, date, clock_in, clock_out
+
+    `Employee` is matched against employees' first_name (case-insensitive).
+    Unmatched names pass through as-is so they still appear in the report.
+    Rows missing Time_in or Time_out (active sessions) are skipped.
+
+    Returns (rows, skipped_count).
+    """
+    if gid is None:
+        raw_rows = client.read_sheet(spreadsheet_id)
+    else:
+        title = client.get_worksheet_title(spreadsheet_id, gid)
+        log.debug("resolved gid=%s to worksheet title %r", gid, title)
+        raw_rows = client.read_sheet(spreadsheet_id, title)
+
+    name_to_id: dict[str, str] = {}
+    for emp in employees:
+        first = str(emp.get("first_name", "")).strip().lower()
+        if first:
+            name_to_id[first] = str(emp["employee_id"])
+
+    adapted: list[dict[str, str]] = []
+    skipped = 0
+    for row in raw_rows:
+        time_in = str(row.get("Time_in", "")).strip()
+        time_out = str(row.get("Time_out", "")).strip()
+        if not time_in or not time_out:
+            skipped += 1
+            continue
+
+        emp_value = str(row.get("Employee", "")).strip()
+        emp_id = name_to_id.get(emp_value.lower(), emp_value)
+
+        adapted.append(
+            {
+                "employee_id": emp_id,
+                "date": _normalize_date(str(row.get("Date", ""))),
+                "clock_in": _normalize_time(time_in),
+                "clock_out": _normalize_time(time_out),
+            }
+        )
+    return adapted, skipped
+
+
 def summarize(
     time_log: Iterable[dict[str, str]],
     employees: Iterable[dict[str, str]],
@@ -73,7 +148,7 @@ def summarize(
             {
                 "employee_id": emp_id,
                 "name": f"{emp.get('first_name', '')} {emp.get('last_name', '')}".strip()
-                or f"Unknown (#{emp_id})",
+                or emp_id,
                 "email": emp.get("email", ""),
                 "days_worked": len(entries),
                 "total_hours": total,
@@ -377,12 +452,35 @@ def render_report(
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="time_reporter",
-        description="Generate a weekly HTML time-tracking report from CSV inputs.",
+        description=(
+            "Generate a weekly HTML time-tracking dashboard. "
+            "Reads from a CSV (default) or the Practice 1 Google Sheet "
+            "(via --time-log-sheet-id)."
+        ),
     )
     parser.add_argument(
         "--time-log",
         default=os.environ.get("TIME_LOG_CSV", DEFAULT_TIME_LOG_CSV),
         help=f"Path to time log CSV (default: {DEFAULT_TIME_LOG_CSV} or $TIME_LOG_CSV).",
+    )
+    parser.add_argument(
+        "--time-log-sheet-id",
+        default=os.environ.get("TIME_LOG_SHEET_ID"),
+        help=(
+            "Google Sheet ID for the Practice 1 time log (overrides --time-log). "
+            "Defaults to $TIME_LOG_SHEET_ID."
+        ),
+    )
+    parser.add_argument(
+        "--time-log-sheet-gid",
+        type=int,
+        default=int(os.environ["TIME_LOG_SHEET_GID"])
+        if os.environ.get("TIME_LOG_SHEET_GID")
+        else None,
+        help=(
+            "Worksheet gid within the time log sheet (from the URL after `#gid=`). "
+            "Defaults to $TIME_LOG_SHEET_GID, or the first worksheet."
+        ),
     )
     parser.add_argument(
         "--employees",
@@ -405,23 +503,67 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    # Pick up TIME_LOG_SHEET_ID etc. before the parser reads its defaults.
+    from dotenv import load_dotenv
+
+    load_dotenv()
+
     args = _build_parser().parse_args(argv)
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(levelname)s %(message)s",
     )
 
-    log.debug("loading time log from %s", args.time_log)
     log.debug("loading employees from %s", args.employees)
     try:
-        time_log = load_csv(args.time_log)
         employees = load_csv(args.employees)
     except FileNotFoundError as exc:
         print(f"error: input CSV not found: {exc.filename}", file=sys.stderr)
         return EXIT_BAD_INPUT
 
+    skipped_sheet_rows = 0
+    source_label: str
+    if args.time_log_sheet_id:
+        try:
+            from src.sheets_client import SheetsAuthError, SheetsClient, SheetsClientError
+        except ImportError as exc:
+            print(f"error: Google Sheets deps not installed: {exc}", file=sys.stderr)
+            return EXIT_ERROR
+
+        source_label = (
+            f"sheet {args.time_log_sheet_id} (gid={args.time_log_sheet_gid})"
+        )
+        log.debug("loading time log from %s", source_label)
+        try:
+            client = SheetsClient()
+            time_log, skipped_sheet_rows = load_time_log_sheet(
+                client, args.time_log_sheet_id, args.time_log_sheet_gid, employees
+            )
+        except SheetsAuthError as exc:
+            print(f"error: Google Sheets auth failed: {exc}", file=sys.stderr)
+            return EXIT_BAD_INPUT
+        except SheetsClientError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return EXIT_BAD_INPUT
+    else:
+        source_label = args.time_log
+        log.debug("loading time log from %s", source_label)
+        try:
+            time_log = load_csv(args.time_log)
+        except FileNotFoundError as exc:
+            print(f"error: input CSV not found: {exc.filename}", file=sys.stderr)
+            return EXIT_BAD_INPUT
+
     if not time_log:
-        print(f"error: no entries found in {args.time_log}", file=sys.stderr)
+        skip_note = (
+            f" ({skipped_sheet_rows} incomplete row(s) skipped)"
+            if skipped_sheet_rows
+            else ""
+        )
+        print(
+            f"error: no complete entries found in {source_label}{skip_note}",
+            file=sys.stderr,
+        )
         return EXIT_BAD_INPUT
 
     try:
@@ -433,9 +575,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         return EXIT_ERROR
 
     total_entries = sum(s["days_worked"] for s in summaries)
+    skip_note = (
+        f" ({skipped_sheet_rows} incomplete row(s) skipped)"
+        if skipped_sheet_rows
+        else ""
+    )
     print(
         f"Wrote report for {len(summaries)} employee(s), "
-        f"{total_entries} entries -> {args.output}"
+        f"{total_entries} entries{skip_note} -> {args.output}"
     )
     return EXIT_OK
 
