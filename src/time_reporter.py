@@ -205,19 +205,18 @@ REPORT_TEMPLATE = Template("""<!doctype html>
     --shadow-md: 0 4px 12px rgba(15, 23, 42, 0.08);
     --row-hover: rgba(59, 130, 246, 0.05);
   }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --bg: #0b1220;
-      --card: #131c2e;
-      --border: #243046;
-      --text: #e6edf6;
-      --muted: #94a3b8;
-      --accent: #60a5fa;
-      --accent-soft: rgba(96, 165, 250, 0.18);
-      --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
-      --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.5);
-      --row-hover: rgba(96, 165, 250, 0.08);
-    }
+  /* Manual theme override (set via JS); falls back to OS preference below. */
+  :root[data-theme="dark"] {
+    --bg: #0b1220;
+    --card: #131c2e;
+    --border: #243046;
+    --text: #e6edf6;
+    --muted: #94a3b8;
+    --accent: #60a5fa;
+    --accent-soft: rgba(96, 165, 250, 0.18);
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.5);
+    --row-hover: rgba(96, 165, 250, 0.08);
   }
   * { box-sizing: border-box; }
   body {
@@ -225,9 +224,38 @@ REPORT_TEMPLATE = Template("""<!doctype html>
     margin: 0; padding: 2rem; background: var(--bg); color: var(--text);
     -webkit-font-smoothing: antialiased;
   }
-  header { margin-bottom: 1.5rem; }
+  header { margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap; }
   header h1 { margin: 0 0 0.25rem; font-size: 1.5rem; letter-spacing: -0.01em; }
   header .meta { color: var(--muted); font-size: 0.9rem; }
+
+  .controls {
+    display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 0.4rem 0.6rem; box-shadow: var(--shadow-sm);
+  }
+  .controls label { color: var(--muted); font-size: 0.8rem; margin-right: 0.15rem; }
+  .controls input[type="date"] {
+    background: transparent; color: var(--text); border: 1px solid var(--border);
+    border-radius: 5px; padding: 0.25rem 0.4rem; font: inherit; font-size: 0.85rem;
+    color-scheme: light dark;
+  }
+  .controls button {
+    background: transparent; color: var(--text); border: 1px solid var(--border);
+    border-radius: 5px; padding: 0.25rem 0.55rem; font-size: 1rem; cursor: pointer;
+    line-height: 1; transition: background 0.12s ease, border-color 0.12s ease;
+  }
+  .controls button:hover { background: var(--accent-soft); border-color: var(--accent-soft); }
+  .controls .reset {
+    font-size: 0.8rem; padding: 0.3rem 0.5rem;
+    color: var(--muted);
+  }
+
+  /* Sort indicator on table headers */
+  th.sortable { cursor: pointer; user-select: none; position: relative; padding-right: 1.2rem; }
+  th.sortable::after { content: ""; position: absolute; right: 0.5rem; top: 50%; opacity: 0.3; font-size: 0.7rem; }
+  th.sortable[data-sort="asc"]::after { content: "▲"; opacity: 1; color: var(--accent); }
+  th.sortable[data-sort="desc"]::after { content: "▼"; opacity: 1; color: var(--accent); }
+  th.sortable:hover { color: var(--text); }
 
   .kpis {
     display: grid;
@@ -291,33 +319,43 @@ REPORT_TEMPLATE = Template("""<!doctype html>
 </head>
 <body>
 <header>
-  <h1>Weekly Time Dashboard</h1>
-  <div class="meta">
-    Generated {{ generated_at }}
-    {% if date_range %} &middot; {{ date_range }}{% endif %}
+  <div>
+    <h1>Weekly Time Dashboard</h1>
+    <div class="meta">
+      Generated {{ generated_at }}
+      {% if date_range %} &middot; <span id="rangeMeta">{{ date_range }}</span>{% endif %}
+    </div>
+  </div>
+  <div class="controls" role="toolbar" aria-label="Dashboard controls">
+    <label for="dateFrom">From</label>
+    <input type="date" id="dateFrom" value="{{ min_date }}" min="{{ min_date }}" max="{{ max_date }}">
+    <label for="dateTo">To</label>
+    <input type="date" id="dateTo" value="{{ max_date }}" min="{{ min_date }}" max="{{ max_date }}">
+    <button class="reset" id="resetRange" type="button" title="Reset to full range">Reset</button>
+    <button id="themeToggle" type="button" aria-label="Toggle theme">🌗</button>
   </div>
 </header>
 
 <section class="kpis">
   <div class="kpi">
     <div class="label">Total hours</div>
-    <div class="value">{{ "%.2f"|format(grand_total) }}</div>
-    <div class="sub">across {{ summaries|length }} employee(s)</div>
+    <div class="value" id="kpiTotal">{{ "%.2f"|format(grand_total) }}</div>
+    <div class="sub" id="kpiTotalSub">across {{ summaries|length }} employee(s)</div>
   </div>
   <div class="kpi">
     <div class="label">Avg hours / employee</div>
-    <div class="value">{{ "%.2f"|format(avg_per_employee) }}</div>
-    <div class="sub">{{ total_entries }} entries logged</div>
+    <div class="value" id="kpiAvg">{{ "%.2f"|format(avg_per_employee) }}</div>
+    <div class="sub" id="kpiAvgSub">{{ total_entries }} entries logged</div>
   </div>
   <div class="kpi">
     <div class="label">Busiest day</div>
-    <div class="value">{{ "%.2f"|format(busiest.hours) }}</div>
-    <div class="sub">{{ busiest.date or "—" }}</div>
+    <div class="value" id="kpiBusiest">{{ "%.2f"|format(busiest.hours) }}</div>
+    <div class="sub" id="kpiBusiestSub">{{ busiest.date or "—" }}</div>
   </div>
   <div class="kpi">
     <div class="label">Top performer</div>
-    <div class="value">{{ summaries[0].name if summaries else "—" }}</div>
-    <div class="sub">{{ "%.2f"|format(summaries[0].total_hours) if summaries else 0 }} h</div>
+    <div class="value" id="kpiTop">{{ summaries[0].name if summaries else "—" }}</div>
+    <div class="sub" id="kpiTopSub">{{ "%.2f"|format(summaries[0].total_hours) if summaries else 0 }} h</div>
   </div>
 </section>
 
@@ -328,6 +366,7 @@ REPORT_TEMPLATE = Template("""<!doctype html>
 
 <section class="card">
   <h2>Per-employee breakdown</h2>
+  <div id="employeeList">
   {% for s in summaries %}
   <details class="employee"{% if loop.first %} open{% endif %}>
     <summary>
@@ -339,7 +378,12 @@ REPORT_TEMPLATE = Template("""<!doctype html>
       </div>
     </summary>
     <table>
-      <thead><tr><th>Date</th><th>In</th><th>Out</th><th class="hours">Hours</th></tr></thead>
+      <thead><tr>
+        <th class="sortable" data-key="date">Date</th>
+        <th class="sortable" data-key="clock_in">In</th>
+        <th class="sortable" data-key="clock_out">Out</th>
+        <th class="sortable hours" data-key="hours">Hours</th>
+      </tr></thead>
       <tbody>
       {% for e in s.entries %}
         <tr>
@@ -353,68 +397,244 @@ REPORT_TEMPLATE = Template("""<!doctype html>
     </table>
   </details>
   {% endfor %}
+  </div>
 </section>
 
 <script>
-  const dailyLabels = {{ daily_dates|tojson }};
-  const dailyHours = {{ daily_hours|tojson }};
+  // ----- Data from Python -----
+  const ALL_ENTRIES = {{ all_entries|tojson }};
+  const MIN_DATE = {{ min_date|tojson }};
+  const MAX_DATE = {{ max_date|tojson }};
 
-  const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-  const accent = isDark ? '#60a5fa' : '#3b82f6';
-  const textColor = isDark ? '#94a3b8' : '#5f6b7a';
-  const gridColor = isDark ? 'rgba(148, 163, 184, 0.12)' : 'rgba(15, 23, 42, 0.06)';
-
-  const canvas = document.getElementById('dailyChart');
-  const ctx = canvas.getContext('2d');
-  const gradient = ctx.createLinearGradient(0, 0, 0, 260);
-  gradient.addColorStop(0, isDark ? 'rgba(96, 165, 250, 0.45)' : 'rgba(59, 130, 246, 0.35)');
-  gradient.addColorStop(1, isDark ? 'rgba(96, 165, 250, 0)' : 'rgba(59, 130, 246, 0)');
-
-  new Chart(canvas, {
-    type: 'line',
-    data: {
-      labels: dailyLabels,
-      datasets: [{
-        label: 'Total hours',
-        data: dailyHours,
-        borderColor: accent,
-        backgroundColor: gradient,
-        borderWidth: 2,
-        fill: true,
-        tension: 0.35,
-        pointRadius: 4,
-        pointHoverRadius: 6,
-        pointBackgroundColor: accent,
-        pointBorderColor: isDark ? '#0b1220' : '#ffffff',
-        pointBorderWidth: 2,
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      interaction: { mode: 'index', intersect: false },
-      animation: { duration: 600, easing: 'easeOutQuart' },
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          backgroundColor: isDark ? '#1e293b' : '#1f2933',
-          padding: 10, cornerRadius: 6, displayColors: false,
-          callbacks: { label: (c) => c.parsed.y.toFixed(2) + ' hours' },
-        },
-      },
-      scales: {
-        y: {
-          beginAtZero: true,
-          ticks: { color: textColor, precision: 0 },
-          grid: { color: gridColor, drawBorder: false },
-        },
-        x: {
-          ticks: { color: textColor },
-          grid: { display: false },
-        },
-      },
-    }
+  // ----- Theme management -----
+  const themeBtn = document.getElementById('themeToggle');
+  function applyTheme(theme) {
+    document.documentElement.dataset.theme = theme;
+    themeBtn.textContent = theme === 'dark' ? '☀️' : '🌙';
+    themeBtn.title = theme === 'dark' ? 'Switch to light' : 'Switch to dark';
+  }
+  function initTheme() {
+    const stored = localStorage.getItem('theme');
+    const osDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    applyTheme(stored || (osDark ? 'dark' : 'light'));
+  }
+  themeBtn.addEventListener('click', () => {
+    const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+    localStorage.setItem('theme', next);
+    applyTheme(next);
+    render(filterEntries()); // chart colors are theme-aware — re-render
   });
+  initTheme();
+
+  // ----- Aggregation (mirrors Python summarize/daily_totals) -----
+  function filterEntries() {
+    const from = document.getElementById('dateFrom').value;
+    const to = document.getElementById('dateTo').value;
+    return ALL_ENTRIES.filter(e => e.date >= from && e.date <= to);
+  }
+  function computeSummaries(entries) {
+    const grouped = {};
+    for (const e of entries) {
+      (grouped[e.employee_id] ||= { id: e.employee_id, name: e.name, entries: [] }).entries.push(e);
+    }
+    const summaries = Object.values(grouped).map(g => {
+      g.entries.sort((a, b) => a.date.localeCompare(b.date));
+      const total = g.entries.reduce((s, e) => s + e.hours, 0);
+      return {
+        id: g.id, name: g.name, entries: g.entries,
+        total_hours: +total.toFixed(2),
+        days_worked: g.entries.length,
+        avg_hours: g.entries.length ? +(total / g.entries.length).toFixed(2) : 0,
+      };
+    });
+    summaries.sort((a, b) => b.total_hours - a.total_hours);
+    return summaries;
+  }
+  function computeDaily(entries) {
+    if (!entries.length) return [];
+    const byDate = {};
+    for (const e of entries) byDate[e.date] = (byDate[e.date] || 0) + e.hours;
+    const dates = Object.keys(byDate).sort();
+    const start = new Date(dates[0] + 'T00:00:00');
+    const end = new Date(dates[dates.length - 1] + 'T00:00:00');
+    const result = [];
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+      const key = d.toISOString().slice(0, 10);
+      result.push({ date: key, hours: +((byDate[key] || 0)).toFixed(2) });
+    }
+    return result;
+  }
+
+  // ----- Chart -----
+  let currentChart = null;
+  function renderChart(daily) {
+    const isDark = document.documentElement.dataset.theme === 'dark';
+    const accent = isDark ? '#60a5fa' : '#3b82f6';
+    const textColor = isDark ? '#94a3b8' : '#5f6b7a';
+    const gridColor = isDark ? 'rgba(148, 163, 184, 0.12)' : 'rgba(15, 23, 42, 0.06)';
+
+    const canvas = document.getElementById('dailyChart');
+    const ctx = canvas.getContext('2d');
+    const gradient = ctx.createLinearGradient(0, 0, 0, 260);
+    gradient.addColorStop(0, isDark ? 'rgba(96, 165, 250, 0.45)' : 'rgba(59, 130, 246, 0.35)');
+    gradient.addColorStop(1, isDark ? 'rgba(96, 165, 250, 0)' : 'rgba(59, 130, 246, 0)');
+
+    if (currentChart) currentChart.destroy();
+    currentChart = new Chart(canvas, {
+      type: 'line',
+      data: {
+        labels: daily.map(d => d.date),
+        datasets: [{
+          label: 'Total hours',
+          data: daily.map(d => d.hours),
+          borderColor: accent,
+          backgroundColor: gradient,
+          borderWidth: 2,
+          fill: true,
+          tension: 0.35,
+          pointRadius: 4,
+          pointHoverRadius: 6,
+          pointBackgroundColor: accent,
+          pointBorderColor: isDark ? '#0b1220' : '#ffffff',
+          pointBorderWidth: 2,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        animation: { duration: 400, easing: 'easeOutQuart' },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: isDark ? '#1e293b' : '#1f2933',
+            padding: 10, cornerRadius: 6, displayColors: false,
+            callbacks: { label: (c) => c.parsed.y.toFixed(2) + ' hours' },
+          },
+        },
+        scales: {
+          y: { beginAtZero: true, ticks: { color: textColor, precision: 0 }, grid: { color: gridColor, drawBorder: false } },
+          x: { ticks: { color: textColor }, grid: { display: false } },
+        },
+      }
+    });
+  }
+
+  // ----- KPI cards -----
+  function renderKpis(summaries, daily) {
+    const grandTotal = summaries.reduce((s, r) => s + r.total_hours, 0);
+    const totalEntries = summaries.reduce((s, r) => s + r.days_worked, 0);
+    const avg = summaries.length ? grandTotal / summaries.length : 0;
+    const busiest = daily.length ? daily.reduce((a, b) => b.hours > a.hours ? b : a) : { date: '—', hours: 0 };
+    const top = summaries[0];
+
+    document.getElementById('kpiTotal').textContent = grandTotal.toFixed(2);
+    document.getElementById('kpiTotalSub').textContent = `across ${summaries.length} employee(s)`;
+    document.getElementById('kpiAvg').textContent = avg.toFixed(2);
+    document.getElementById('kpiAvgSub').textContent = `${totalEntries} entries logged`;
+    document.getElementById('kpiBusiest').textContent = busiest.hours.toFixed(2);
+    document.getElementById('kpiBusiestSub').textContent = busiest.date || '—';
+    document.getElementById('kpiTop').textContent = top ? top.name : '—';
+    document.getElementById('kpiTopSub').textContent = top ? `${top.total_hours.toFixed(2)} h` : '0 h';
+  }
+
+  // ----- Employee list -----
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+  function renderEmployees(summaries) {
+    const wrap = document.getElementById('employeeList');
+    if (!summaries.length) {
+      wrap.innerHTML = '<p style="color:var(--muted);font-size:0.9rem;margin:0;">No entries in this date range.</p>';
+      return;
+    }
+    wrap.innerHTML = summaries.map((s, i) => `
+      <details class="employee"${i === 0 ? ' open' : ''} data-employee-id="${escapeHtml(s.id)}">
+        <summary>
+          <div><span class="name">${escapeHtml(s.name)}</span><span class="id">#${escapeHtml(s.id)}</span></div>
+          <div class="stats">
+            <strong>${s.total_hours.toFixed(2)} h</strong> &middot;
+            ${s.days_worked} day(s) &middot;
+            avg ${s.avg_hours.toFixed(2)} h/day
+          </div>
+        </summary>
+        <table>
+          <thead><tr>
+            <th class="sortable" data-key="date">Date</th>
+            <th class="sortable" data-key="clock_in">In</th>
+            <th class="sortable" data-key="clock_out">Out</th>
+            <th class="sortable hours" data-key="hours">Hours</th>
+          </tr></thead>
+          <tbody>
+            ${s.entries.map(e => `
+              <tr>
+                <td>${escapeHtml(e.date)}</td>
+                <td>${escapeHtml(e.clock_in)}</td>
+                <td>${escapeHtml(e.clock_out)}</td>
+                <td class="hours">${e.hours.toFixed(2)}</td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      </details>
+    `).join('');
+  }
+
+  // ----- Master render -----
+  function render(entries) {
+    const summaries = computeSummaries(entries);
+    const daily = computeDaily(entries);
+    renderKpis(summaries, daily);
+    renderChart(daily);
+    renderEmployees(summaries);
+    updateRangeMeta();
+  }
+  function updateRangeMeta() {
+    const meta = document.getElementById('rangeMeta');
+    if (!meta) return;
+    const from = document.getElementById('dateFrom').value;
+    const to = document.getElementById('dateTo').value;
+    meta.textContent = `${from} → ${to}`;
+  }
+
+  // ----- Date range filter -----
+  ['dateFrom', 'dateTo'].forEach(id => {
+    document.getElementById(id).addEventListener('input', () => render(filterEntries()));
+  });
+  document.getElementById('resetRange').addEventListener('click', () => {
+    document.getElementById('dateFrom').value = MIN_DATE;
+    document.getElementById('dateTo').value = MAX_DATE;
+    render(filterEntries());
+  });
+
+  // ----- Sortable columns (delegated) -----
+  document.addEventListener('click', (ev) => {
+    const th = ev.target.closest('th.sortable');
+    if (!th) return;
+    const table = th.closest('table');
+    const tbody = table.querySelector('tbody');
+    const key = th.dataset.key;
+    const headers = [...table.querySelectorAll('th.sortable')];
+    const currentDir = th.dataset.sort;
+    const dir = currentDir === 'asc' ? 'desc' : 'asc';
+    headers.forEach(h => h.removeAttribute('data-sort'));
+    th.dataset.sort = dir;
+
+    const rows = [...tbody.querySelectorAll('tr')];
+    const colIdx = headers.indexOf(th);
+    const numeric = key === 'hours';
+    rows.sort((a, b) => {
+      const av = a.children[colIdx].textContent.trim();
+      const bv = b.children[colIdx].textContent.trim();
+      const cmp = numeric ? parseFloat(av) - parseFloat(bv) : av.localeCompare(bv);
+      return dir === 'asc' ? cmp : -cmp;
+    });
+    rows.forEach(r => tbody.appendChild(r));
+  });
+
+  // ----- Initial render -----
+  // Python renders the static initial view, so we only invoke the chart once.
+  // The KPI/employee blocks already match the unfiltered state.
+  renderChart(computeDaily(ALL_ENTRIES));
 </script>
 </body>
 </html>
@@ -434,9 +654,26 @@ def render_report(
     avg_per_employee = grand_total / len(summaries) if summaries else 0.0
     busiest = max(daily, key=lambda d: d["hours"]) if daily else {"date": "", "hours": 0.0}
     date_range = f"{daily[0]['date']} → {daily[-1]['date']}" if daily else ""
+    min_date = daily[0]["date"] if daily else ""
+    max_date = daily[-1]["date"] if daily else ""
+
+    # Flatten summaries into per-punch entries for client-side filtering.
+    all_entries = [
+        {
+            "employee_id": s["employee_id"],
+            "name": s["name"],
+            "date": e["date"],
+            "clock_in": e["clock_in"],
+            "clock_out": e["clock_out"],
+            "hours": e["hours"],
+        }
+        for s in summaries
+        for e in s["entries"]
+    ]
 
     html = REPORT_TEMPLATE.render(
         summaries=summaries,
+        all_entries=all_entries,
         daily_dates=[d["date"] for d in daily],
         daily_hours=[d["hours"] for d in daily],
         grand_total=grand_total,
@@ -444,6 +681,8 @@ def render_report(
         avg_per_employee=avg_per_employee,
         busiest=busiest,
         date_range=date_range,
+        min_date=min_date,
+        max_date=max_date,
         generated_at=datetime.now().strftime("%Y-%m-%d %H:%M"),
     )
     out.write_text(html, encoding="utf-8")
