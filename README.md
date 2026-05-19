@@ -20,21 +20,66 @@ Time Log Sheet (Practice 1)  ──► time_reporter.py   ──► output/weekl
 
 ## Installation
 
-> _TODO: finalize once dependencies are pinned._
+The repo ships with sample data in [data/](data/), so you can run both
+tools end-to-end immediately after `pip install` — no Google credentials
+or `.env` required for the CSV path.
+
+### 1. Clone and create a venv
 
 ```bash
 git clone https://github.com/Historfic/alpha-omega-employee-tool.git
 cd alpha-omega-employee-tool
 python -m venv venv
-# Windows
-venv\Scripts\activate
-# macOS / Linux
-source venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env  # then fill in real values
 ```
 
-See [docs/setup.md](docs/setup.md) for the Google Cloud / service-account walkthrough, and [config/README.md](config/README.md) for where `credentials.json` belongs.
+### 2. Activate the venv
+
+**Windows (PowerShell):**
+```powershell
+venv\Scripts\Activate.ps1
+```
+If you see `running scripts is disabled on this system`, either run this
+once to allow local scripts:
+```powershell
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+```
+…or skip activation entirely and just call `venv\Scripts\python.exe` directly
+in any later command — both work.
+
+**Windows (cmd):**
+```cmd
+venv\Scripts\activate.bat
+```
+
+**macOS / Linux:**
+```bash
+source venv/bin/activate
+```
+
+### 3. Install dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+### 4. (Optional) Configure `.env` for the Google Sheets path
+
+`.env` is **only required if you want to read from Google Sheets** — the
+CSV path needs no configuration. To opt in:
+
+**Windows (PowerShell):**
+```powershell
+Copy-Item .env.example .env
+```
+**macOS / Linux:**
+```bash
+cp .env.example .env
+```
+
+Then edit `.env` and fill in your sheet IDs / credentials path. See
+[docs/setup.md](docs/setup.md) for the Google Cloud / service-account
+walkthrough, and [config/README.md](config/README.md) for where
+`credentials.json` belongs.
 
 ## Usage
 
@@ -49,6 +94,18 @@ python main.py report [--time-log PATH] [--employees PATH] [-o OUT] [-v]
 python -m src.qr_generator --help
 python -m src.time_reporter --help
 ```
+
+Out of the box, with no configuration, you should see:
+
+```
+$ python main.py qr
+Wrote 5 QR codes to output/qr_codes.pdf
+
+$ python main.py report
+Wrote report for 5 employee(s), 22 entries -> output/weekly_report.html
+```
+
+Open `output/qr_codes.pdf` and `output/weekly_report.html` to view the artifacts.
 
 Common flags:
 
@@ -79,9 +136,10 @@ Outputs land in [output/](output/) (gitignored).
 
 ```
 alpha-omega-employee-tool/
-├── src/            # application code
-├── config/         # credential placement instructions
-├── data/           # sample inputs (employees.csv)
+├── main.py         # CLI dispatcher (python main.py qr | report)
+├── src/            # application code (qr_generator, time_reporter, sheets_client)
+├── config/         # credential placement instructions (credentials.json goes here, gitignored)
+├── data/           # sample inputs (employees.csv, time_log.csv)
 ├── output/         # generated PDFs / HTML (gitignored)
 ├── tests/          # pytest suite
 └── docs/           # setup + reference docs
