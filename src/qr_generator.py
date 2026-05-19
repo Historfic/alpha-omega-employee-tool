@@ -7,11 +7,14 @@ underneath shows the employee's name and ID for human reference.
 """
 from __future__ import annotations
 
+import argparse
 import csv
 import io
+import logging
 import os
+import sys
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Sequence
 
 import qrcode
 from reportlab.lib.pagesizes import LETTER
@@ -20,6 +23,12 @@ from reportlab.pdfgen import canvas
 
 DEFAULT_CSV = "data/employees.csv"
 DEFAULT_PDF = "output/qr_codes.pdf"
+
+log = logging.getLogger(__name__)
+
+EXIT_OK = 0
+EXIT_ERROR = 1
+EXIT_BAD_INPUT = 2
 
 # Grid layout (Letter = 8.5 x 11 in).
 COLUMNS = 3
@@ -93,17 +102,61 @@ def build_pdf(employees: Iterable[Employee], output_path: str | os.PathLike[str]
     pdf.save()
 
 
-def main() -> None:
-    csv_path = os.environ.get("EMPLOYEES_CSV", DEFAULT_CSV)
-    pdf_path = os.environ.get("QR_PDF_OUTPUT", DEFAULT_PDF)
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="qr_generator",
+        description="Generate a printable PDF of per-employee QR codes from a CSV.",
+    )
+    parser.add_argument(
+        "--csv",
+        default=os.environ.get("EMPLOYEES_CSV", DEFAULT_CSV),
+        help=f"Path to employees CSV (default: {DEFAULT_CSV} or $EMPLOYEES_CSV).",
+    )
+    parser.add_argument(
+        "-o",
+        "--output",
+        default=os.environ.get("QR_PDF_OUTPUT", DEFAULT_PDF),
+        help=f"PDF output path (default: {DEFAULT_PDF} or $QR_PDF_OUTPUT).",
+    )
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="Enable debug-level logging.",
+    )
+    return parser
 
-    employees = load_employees_csv(csv_path)
+
+def main(argv: Sequence[str] | None = None) -> int:
+    args = _build_parser().parse_args(argv)
+    logging.basicConfig(
+        level=logging.DEBUG if args.verbose else logging.INFO,
+        format="%(levelname)s %(message)s",
+    )
+    # PIL/PNG codec is chatty at DEBUG — keep our own debug output readable.
+    logging.getLogger("PIL").setLevel(logging.INFO)
+
+    log.debug("loading employees from %s", args.csv)
+    try:
+        employees = load_employees_csv(args.csv)
+    except FileNotFoundError:
+        print(f"error: employees CSV not found: {args.csv}", file=sys.stderr)
+        return EXIT_BAD_INPUT
+
     if not employees:
-        raise SystemExit(f"No employees found in {csv_path}")
+        print(f"error: no employees found in {args.csv}", file=sys.stderr)
+        return EXIT_BAD_INPUT
 
-    build_pdf(employees, pdf_path)
-    print(f"Wrote {len(employees)} QR codes to {pdf_path}")
+    log.debug("rendering %d QR codes to %s", len(employees), args.output)
+    try:
+        build_pdf(employees, args.output)
+    except OSError as exc:
+        print(f"error: failed to write PDF: {exc}", file=sys.stderr)
+        return EXIT_ERROR
+
+    print(f"Wrote {len(employees)} QR codes to {args.output}")
+    return EXIT_OK
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

@@ -6,18 +6,27 @@ renders a per-employee summary to `output/weekly_report.html`.
 """
 from __future__ import annotations
 
+import argparse
 import csv
+import logging
 import os
+import sys
 from collections import defaultdict
 from datetime import datetime, time
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Sequence
 
 from jinja2 import Template
 
 DEFAULT_TIME_LOG_CSV = "data/time_log.csv"
 DEFAULT_EMPLOYEES_CSV = "data/employees.csv"
 DEFAULT_HTML = "output/weekly_report.html"
+
+log = logging.getLogger(__name__)
+
+EXIT_OK = 0
+EXIT_ERROR = 1
+EXIT_BAD_INPUT = 2
 
 
 def load_csv(path: str | os.PathLike[str]) -> list[dict[str, str]]:
@@ -147,23 +156,70 @@ def render_report(summaries: list[dict], output_path: str | os.PathLike[str]) ->
     out.write_text(html, encoding="utf-8")
 
 
-def main() -> None:
-    time_log_path = os.environ.get("TIME_LOG_CSV", DEFAULT_TIME_LOG_CSV)
-    employees_path = os.environ.get("EMPLOYEES_CSV", DEFAULT_EMPLOYEES_CSV)
-    out_path = os.environ.get("REPORT_HTML_OUTPUT", DEFAULT_HTML)
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="time_reporter",
+        description="Generate a weekly HTML time-tracking report from CSV inputs.",
+    )
+    parser.add_argument(
+        "--time-log",
+        default=os.environ.get("TIME_LOG_CSV", DEFAULT_TIME_LOG_CSV),
+        help=f"Path to time log CSV (default: {DEFAULT_TIME_LOG_CSV} or $TIME_LOG_CSV).",
+    )
+    parser.add_argument(
+        "--employees",
+        default=os.environ.get("EMPLOYEES_CSV", DEFAULT_EMPLOYEES_CSV),
+        help=f"Path to employees CSV (default: {DEFAULT_EMPLOYEES_CSV} or $EMPLOYEES_CSV).",
+    )
+    parser.add_argument(
+        "-o",
+        "--output",
+        default=os.environ.get("REPORT_HTML_OUTPUT", DEFAULT_HTML),
+        help=f"HTML output path (default: {DEFAULT_HTML} or $REPORT_HTML_OUTPUT).",
+    )
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="Enable debug-level logging.",
+    )
+    return parser
 
-    time_log = load_csv(time_log_path)
-    employees = load_csv(employees_path)
+
+def main(argv: Sequence[str] | None = None) -> int:
+    args = _build_parser().parse_args(argv)
+    logging.basicConfig(
+        level=logging.DEBUG if args.verbose else logging.INFO,
+        format="%(levelname)s %(message)s",
+    )
+
+    log.debug("loading time log from %s", args.time_log)
+    log.debug("loading employees from %s", args.employees)
+    try:
+        time_log = load_csv(args.time_log)
+        employees = load_csv(args.employees)
+    except FileNotFoundError as exc:
+        print(f"error: input CSV not found: {exc.filename}", file=sys.stderr)
+        return EXIT_BAD_INPUT
+
     if not time_log:
-        raise SystemExit(f"No entries found in {time_log_path}")
+        print(f"error: no entries found in {args.time_log}", file=sys.stderr)
+        return EXIT_BAD_INPUT
 
-    summaries = summarize(time_log, employees)
-    render_report(summaries, out_path)
+    try:
+        summaries = summarize(time_log, employees)
+        render_report(summaries, args.output)
+    except (ValueError, OSError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_ERROR
+
+    total_entries = sum(s["days_worked"] for s in summaries)
     print(
         f"Wrote report for {len(summaries)} employee(s), "
-        f"{sum(s['days_worked'] for s in summaries)} entries -> {out_path}"
+        f"{total_entries} entries -> {args.output}"
     )
+    return EXIT_OK
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
