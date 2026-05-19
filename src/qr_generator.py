@@ -1,9 +1,12 @@
 """Generate a printable PDF of per-employee QR codes.
 
-Reads employees from `data/employees.csv` (CSV columns: employee_id,
-first_name, last_name, email) and writes a grid of QR codes to
-`output/qr_codes.pdf`. Each QR encodes the employee_id; the caption
-underneath shows the employee's name and ID for human reference.
+Reads employees from either `data/employees.csv` or a Google Sheet
+(via `SheetsClient`) and writes a grid of QR codes to `output/qr_codes.pdf`.
+Each QR encodes the employee_id; the caption underneath shows the employee's
+name and ID for human reference.
+
+Input columns expected (header row in either source):
+    employee_id, first_name, last_name, email
 """
 from __future__ import annotations
 
@@ -46,6 +49,23 @@ class Employee(dict):
 def load_employees_csv(path: str | os.PathLike[str]) -> list[Employee]:
     with open(path, newline="", encoding="utf-8") as f:
         return [Employee(row) for row in csv.DictReader(f)]
+
+
+def load_employees_sheet(
+    client, spreadsheet_id: str, gid: int | None = None
+) -> list[Employee]:
+    """Fetch employees from a Google Sheet via SheetsClient.
+
+    `client` is a `SheetsClient` instance (imported lazily in `main` so the
+    CSV path stays usable without Google deps configured).
+    """
+    if gid is None:
+        rows = client.read_sheet(spreadsheet_id)
+    else:
+        title = client.get_worksheet_title(spreadsheet_id, gid)
+        log.debug("resolved gid=%s to worksheet title %r", gid, title)
+        rows = client.read_sheet(spreadsheet_id, title)
+    return [Employee({k: str(v) for k, v in row.items()}) for row in rows]
 
 
 def make_qr_png(payload: str) -> bytes:
@@ -105,12 +125,34 @@ def build_pdf(employees: Iterable[Employee], output_path: str | os.PathLike[str]
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="qr_generator",
-        description="Generate a printable PDF of per-employee QR codes from a CSV.",
+        description=(
+            "Generate a printable PDF of per-employee QR codes. "
+            "Reads employees from a CSV (default) or a Google Sheet (--sheet-id)."
+        ),
     )
     parser.add_argument(
         "--csv",
         default=os.environ.get("EMPLOYEES_CSV", DEFAULT_CSV),
         help=f"Path to employees CSV (default: {DEFAULT_CSV} or $EMPLOYEES_CSV).",
+    )
+    parser.add_argument(
+        "--sheet-id",
+        default=os.environ.get("EMPLOYEE_SHEET_ID"),
+        help=(
+            "Google Sheet ID (overrides --csv). "
+            "Defaults to $EMPLOYEE_SHEET_ID if set."
+        ),
+    )
+    parser.add_argument(
+        "--sheet-gid",
+        type=int,
+        default=int(os.environ["EMPLOYEE_SHEET_GID"])
+        if os.environ.get("EMPLOYEE_SHEET_GID")
+        else None,
+        help=(
+            "Worksheet gid within the sheet (from the URL after `#gid=`). "
+            "Defaults to $EMPLOYEE_SHEET_GID, or the first worksheet."
+        ),
     )
     parser.add_argument(
         "-o",
@@ -128,6 +170,11 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    # Pick up EMPLOYEE_SHEET_ID etc. before the parser reads its defaults.
+    from dotenv import load_dotenv
+
+    load_dotenv()
+
     args = _build_parser().parse_args(argv)
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,
@@ -136,15 +183,36 @@ def main(argv: Sequence[str] | None = None) -> int:
     # PIL/PNG codec is chatty at DEBUG — keep our own debug output readable.
     logging.getLogger("PIL").setLevel(logging.INFO)
 
-    log.debug("loading employees from %s", args.csv)
-    try:
-        employees = load_employees_csv(args.csv)
-    except FileNotFoundError:
-        print(f"error: employees CSV not found: {args.csv}", file=sys.stderr)
-        return EXIT_BAD_INPUT
+    source_label: str
+    if args.sheet_id:
+        try:
+            from src.sheets_client import SheetsAuthError, SheetsClient, SheetsClientError
+        except ImportError as exc:
+            print(f"error: Google Sheets deps not installed: {exc}", file=sys.stderr)
+            return EXIT_ERROR
+
+        source_label = f"sheet {args.sheet_id} (gid={args.sheet_gid})"
+        log.debug("loading employees from %s", source_label)
+        try:
+            client = SheetsClient()
+            employees = load_employees_sheet(client, args.sheet_id, args.sheet_gid)
+        except SheetsAuthError as exc:
+            print(f"error: Google Sheets auth failed: {exc}", file=sys.stderr)
+            return EXIT_BAD_INPUT
+        except SheetsClientError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return EXIT_BAD_INPUT
+    else:
+        source_label = args.csv
+        log.debug("loading employees from %s", source_label)
+        try:
+            employees = load_employees_csv(args.csv)
+        except FileNotFoundError:
+            print(f"error: employees CSV not found: {args.csv}", file=sys.stderr)
+            return EXIT_BAD_INPUT
 
     if not employees:
-        print(f"error: no employees found in {args.csv}", file=sys.stderr)
+        print(f"error: no employees found in {source_label}", file=sys.stderr)
         return EXIT_BAD_INPUT
 
     log.debug("rendering %d QR codes to %s", len(employees), args.output)
