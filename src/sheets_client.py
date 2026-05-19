@@ -101,13 +101,35 @@ class SheetsClient:
         ws = self._open_worksheet(spreadsheet_id, worksheet)
         self._call(ws.append_row, row, value_input_option=value_input_option)
 
+    def get_worksheet_title(self, spreadsheet_id: str, gid: int) -> str:
+        """Resolve a worksheet `gid` (from a sheet URL) to its title.
+
+        Useful when the caller has a Google Sheets URL — the `gid` query param
+        identifies the worksheet but the public read/append methods address it
+        by title or index.
+        """
+        sheet = self._open_spreadsheet(spreadsheet_id)
+        try:
+            return self._call(sheet.get_worksheet_by_id, gid).title
+        except WorksheetNotFound as exc:
+            raise SheetsClientError(f"Worksheet not found for gid={gid}") from exc
+
     # ---------------------------------------------------------------- internal
 
-    def _open_worksheet(self, spreadsheet_id: str, worksheet: WorksheetRef):
+    def _open_spreadsheet(self, spreadsheet_id: str):
+        """Open a spreadsheet by ID, translating gspread errors to our types."""
         try:
-            sheet = self._call(self._client.open_by_key, spreadsheet_id)
+            return self._call(self._client.open_by_key, spreadsheet_id)
         except SpreadsheetNotFound as exc:
             raise SheetsClientError(f"Spreadsheet not found: {spreadsheet_id}") from exc
+        except PermissionError as exc:
+            raise SheetsAuthError(
+                f"Access denied to spreadsheet {spreadsheet_id} — "
+                "is it shared with the service account?"
+            ) from exc
+
+    def _open_worksheet(self, spreadsheet_id: str, worksheet: WorksheetRef):
+        sheet = self._open_spreadsheet(spreadsheet_id)
 
         try:
             if isinstance(worksheet, int):
@@ -152,9 +174,7 @@ if __name__ == "__main__":
     print(f"Connecting to spreadsheet {spreadsheet_id} ...")
     client = SheetsClient()
 
-    # Resolve gid -> worksheet title so the public methods can address it.
-    sheet = client._client.open_by_key(spreadsheet_id)
-    worksheet_title = sheet.get_worksheet_by_id(gid).title
+    worksheet_title = client.get_worksheet_title(spreadsheet_id, gid)
     print(f"Using worksheet (gid={gid}): {worksheet_title!r}\n")
 
     print("--- read_sheet() ---")

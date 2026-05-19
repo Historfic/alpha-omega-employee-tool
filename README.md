@@ -55,9 +55,15 @@ Common flags:
 | Flag | Purpose |
 |---|---|
 | `--csv` / `--time-log` / `--employees` | Override the input CSV path |
+| `--sheet-id` / `--sheet-gid` *(qr only)* | Read employees from a Google Sheet instead of CSV. `--sheet-gid` is the worksheet ID from `#gid=` in the sheet URL. |
 | `-o` / `--output` | Override the output path |
 | `-v` / `--verbose` | Debug-level logging |
 | `-h` / `--help` | Show usage and exit |
+
+For `python main.py qr`, the source defaults to **Sheets** if
+`EMPLOYEE_SHEET_ID` is set in `.env` (or the environment); otherwise it falls
+back to the CSV at `data/employees.csv`. To force CSV when the env var is set,
+pass `--sheet-id ""`.
 
 Defaults read from env vars (`EMPLOYEES_CSV`, `TIME_LOG_CSV`,
 `QR_PDF_OUTPUT`, `REPORT_HTML_OUTPUT`) if set, otherwise from the paths
