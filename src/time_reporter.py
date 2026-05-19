@@ -126,14 +126,32 @@ REPORT_TEMPLATE = Template("""<!doctype html>
     --muted: #5f6b7a;
     --accent: #3b82f6;
     --accent-soft: rgba(59, 130, 246, 0.12);
+    --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
+    --shadow-md: 0 4px 12px rgba(15, 23, 42, 0.08);
+    --row-hover: rgba(59, 130, 246, 0.05);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0b1220;
+      --card: #131c2e;
+      --border: #243046;
+      --text: #e6edf6;
+      --muted: #94a3b8;
+      --accent: #60a5fa;
+      --accent-soft: rgba(96, 165, 250, 0.18);
+      --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+      --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.5);
+      --row-hover: rgba(96, 165, 250, 0.08);
+    }
   }
   * { box-sizing: border-box; }
   body {
     font-family: -apple-system, Segoe UI, Helvetica, Arial, sans-serif;
     margin: 0; padding: 2rem; background: var(--bg); color: var(--text);
+    -webkit-font-smoothing: antialiased;
   }
   header { margin-bottom: 1.5rem; }
-  header h1 { margin: 0 0 0.25rem; font-size: 1.5rem; }
+  header h1 { margin: 0 0 0.25rem; font-size: 1.5rem; letter-spacing: -0.01em; }
   header .meta { color: var(--muted); font-size: 0.9rem; }
 
   .kpis {
@@ -144,32 +162,55 @@ REPORT_TEMPLATE = Template("""<!doctype html>
   }
   .kpi {
     background: var(--card); border: 1px solid var(--border);
-    border-radius: 8px; padding: 1rem 1.25rem;
+    border-radius: 10px; padding: 1rem 1.25rem;
+    box-shadow: var(--shadow-sm);
+    transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
   }
-  .kpi .label { color: var(--muted); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; }
-  .kpi .value { font-size: 1.6rem; font-weight: 600; margin-top: 0.25rem; font-variant-numeric: tabular-nums; }
-  .kpi .sub { color: var(--muted); font-size: 0.8rem; margin-top: 0.1rem; }
+  .kpi:hover {
+    transform: translateY(-2px); box-shadow: var(--shadow-md);
+    border-color: var(--accent-soft);
+  }
+  .kpi .label { color: var(--muted); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; }
+  .kpi .value { font-size: 1.7rem; font-weight: 600; margin-top: 0.3rem; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+  .kpi .sub { color: var(--muted); font-size: 0.8rem; margin-top: 0.15rem; }
 
   .card {
     background: var(--card); border: 1px solid var(--border);
-    border-radius: 8px; padding: 1rem 1.25rem; margin-bottom: 1.25rem;
+    border-radius: 10px; padding: 1rem 1.25rem; margin-bottom: 1.25rem;
+    box-shadow: var(--shadow-sm);
   }
-  .card h2 { margin: 0 0 0.75rem; font-size: 1rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+  .card h2 { margin: 0 0 0.75rem; font-size: 0.85rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
 
   .chart-wrap { position: relative; height: 260px; }
 
-  .employee .head {
+  details.employee { border-top: 1px solid var(--border); padding: 0.85rem 0; }
+  details.employee:first-of-type { border-top: none; padding-top: 0.25rem; }
+  details.employee:last-of-type { padding-bottom: 0.25rem; }
+  details.employee > summary {
+    list-style: none; cursor: pointer; outline: none;
     display: flex; justify-content: space-between; align-items: baseline;
-    gap: 1rem; flex-wrap: wrap; margin-bottom: 0.5rem;
+    gap: 1rem; flex-wrap: wrap; padding: 0.25rem 0;
+    border-radius: 6px; transition: background 0.12s ease;
   }
-  .employee .head .name { font-size: 1.05rem; font-weight: 600; }
-  .employee .head .id { color: var(--muted); font-weight: normal; font-size: 0.85rem; margin-left: 0.4rem; }
-  .employee .head .stats { color: var(--muted); font-size: 0.9rem; }
-  .employee .head .stats strong { color: var(--text); }
+  details.employee > summary::-webkit-details-marker { display: none; }
+  details.employee > summary::before {
+    content: "▸"; color: var(--muted); margin-right: 0.5rem;
+    display: inline-block; transition: transform 0.15s ease;
+    font-size: 0.85rem;
+  }
+  details.employee[open] > summary::before { transform: rotate(90deg); }
+  details.employee > summary:hover { background: var(--row-hover); }
+  details.employee .name { font-size: 1.05rem; font-weight: 600; }
+  details.employee .id { color: var(--muted); font-weight: normal; font-size: 0.85rem; margin-left: 0.4rem; }
+  details.employee .stats { color: var(--muted); font-size: 0.9rem; }
+  details.employee .stats strong { color: var(--text); }
+  details.employee table { margin-top: 0.75rem; margin-left: 1.5rem; }
 
-  table { border-collapse: collapse; width: 100%; max-width: 640px; }
-  th, td { text-align: left; padding: 0.35rem 0.7rem; border-bottom: 1px solid var(--border); font-size: 0.9rem; }
-  th { background: #fafbfc; font-weight: 600; color: var(--muted); }
+  table { border-collapse: collapse; width: calc(100% - 1.5rem); max-width: 640px; }
+  th, td { text-align: left; padding: 0.4rem 0.7rem; border-bottom: 1px solid var(--border); font-size: 0.9rem; }
+  th { background: transparent; font-weight: 600; color: var(--muted); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; }
+  tr { transition: background 0.1s ease; }
+  tbody tr:hover { background: var(--row-hover); }
   td.hours { text-align: right; font-variant-numeric: tabular-nums; }
 </style>
 </head>
@@ -213,15 +254,15 @@ REPORT_TEMPLATE = Template("""<!doctype html>
 <section class="card">
   <h2>Per-employee breakdown</h2>
   {% for s in summaries %}
-  <div class="employee" style="{% if not loop.last %}margin-bottom: 1.5rem;{% endif %}">
-    <div class="head">
+  <details class="employee"{% if loop.first %} open{% endif %}>
+    <summary>
       <div><span class="name">{{ s.name }}</span><span class="id">#{{ s.employee_id }}</span></div>
       <div class="stats">
         <strong>{{ "%.2f"|format(s.total_hours) }} h</strong> &middot;
         {{ s.days_worked }} day(s) &middot;
         avg {{ "%.2f"|format(s.avg_hours) }} h/day
       </div>
-    </div>
+    </summary>
     <table>
       <thead><tr><th>Date</th><th>In</th><th>Out</th><th class="hours">Hours</th></tr></thead>
       <tbody>
@@ -235,39 +276,68 @@ REPORT_TEMPLATE = Template("""<!doctype html>
       {% endfor %}
       </tbody>
     </table>
-  </div>
+  </details>
   {% endfor %}
 </section>
 
 <script>
   const dailyLabels = {{ daily_dates|tojson }};
   const dailyHours = {{ daily_hours|tojson }};
-  new Chart(document.getElementById('dailyChart'), {
+
+  const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const accent = isDark ? '#60a5fa' : '#3b82f6';
+  const textColor = isDark ? '#94a3b8' : '#5f6b7a';
+  const gridColor = isDark ? 'rgba(148, 163, 184, 0.12)' : 'rgba(15, 23, 42, 0.06)';
+
+  const canvas = document.getElementById('dailyChart');
+  const ctx = canvas.getContext('2d');
+  const gradient = ctx.createLinearGradient(0, 0, 0, 260);
+  gradient.addColorStop(0, isDark ? 'rgba(96, 165, 250, 0.45)' : 'rgba(59, 130, 246, 0.35)');
+  gradient.addColorStop(1, isDark ? 'rgba(96, 165, 250, 0)' : 'rgba(59, 130, 246, 0)');
+
+  new Chart(canvas, {
     type: 'line',
     data: {
       labels: dailyLabels,
       datasets: [{
         label: 'Total hours',
         data: dailyHours,
-        borderColor: '#3b82f6',
-        backgroundColor: 'rgba(59, 130, 246, 0.15)',
+        borderColor: accent,
+        backgroundColor: gradient,
+        borderWidth: 2,
         fill: true,
-        tension: 0.3,
+        tension: 0.35,
         pointRadius: 4,
-        pointBackgroundColor: '#3b82f6',
+        pointHoverRadius: 6,
+        pointBackgroundColor: accent,
+        pointBorderColor: isDark ? '#0b1220' : '#ffffff',
+        pointBorderWidth: 2,
       }]
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      animation: { duration: 600, easing: 'easeOutQuart' },
       plugins: {
         legend: { display: false },
-        tooltip: { callbacks: { label: (c) => c.parsed.y.toFixed(2) + ' hours' } },
+        tooltip: {
+          backgroundColor: isDark ? '#1e293b' : '#1f2933',
+          padding: 10, cornerRadius: 6, displayColors: false,
+          callbacks: { label: (c) => c.parsed.y.toFixed(2) + ' hours' },
+        },
       },
       scales: {
-        y: { beginAtZero: true, ticks: { precision: 0 } },
-        x: { grid: { display: false } },
-      }
+        y: {
+          beginAtZero: true,
+          ticks: { color: textColor, precision: 0 },
+          grid: { color: gridColor, drawBorder: false },
+        },
+        x: {
+          ticks: { color: textColor },
+          grid: { display: false },
+        },
+      },
     }
   });
 </script>
