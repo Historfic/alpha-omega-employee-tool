@@ -224,3 +224,6 @@ output/*
 # Service account credentials — never commit
 config/credentials.json
 config/*.json
+
+# Local demo / scratch clones
+ao-demo/
