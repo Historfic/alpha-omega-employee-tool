@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Clock {{action}} confirmed</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { min-height: 100%; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f4f6fb;
+      color: #1f2937;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem;
+      line-height: 1.4;
+    }
+    .card {
+      background: #ffffff;
+      border-radius: 1.25rem;
+      padding: 2.5rem 1.75rem;
+      max-width: 28rem;
+      width: 100%;
+      box-shadow: 0 14px 40px rgba(15, 23, 42, 0.12);
+      text-align: center;
+    }
+    .badge {
+      display: inline-block;
+      padding: 0.6rem 1.25rem;
+      background: #16a34a;
+      color: #ffffff;
+      border-radius: 999px;
+      font-size: 1rem;
+      font-weight: 700;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+    }
+    h1 {
+      font-size: 2rem;
+      font-weight: 600;
+      margin: 1.5rem 0 0.5rem;
+    }
+    .subtitle {
+      color: #6b7280;
+      font-size: 1.1rem;
+      margin-bottom: 2rem;
+    }
+    .row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1rem 0;
+      border-top: 1px solid #e5e7eb;
+      font-size: 1.15rem;
+    }
+    .row:last-child { border-bottom: 1px solid #e5e7eb; }
+    .label {
+      color: #6b7280;
+      font-size: 0.95rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .value {
+      color: #111827;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      text-align: right;
+      max-width: 60%;
+      word-break: break-word;
+    }
+    @media (min-width: 480px) {
+      .card { padding: 3rem 2.5rem; }
+      h1 { font-size: 2.25rem; }
+    }
+  </style>
+</head>
+<body>
+  <main class="card" role="main">
+    <span class="badge">Clocked {{action}}</span>
+    <h1>You're all set</h1>
+    <p class="subtitle">Your scan was recorded.</p>
+    <div class="row">
+      <span class="label">Employee ID</span>
+      <span class="value">{{employee_id}}</span>
+    </div>
+    <div class="row">
+      <span class="label">Action</span>
+      <span class="value">{{action}}</span>
+    </div>
+    <div class="row">
+      <span class="label">Time</span>
+      <span class="value">{{timestamp}}</span>
+    </div>
+  </main>
+</body>
+</html>

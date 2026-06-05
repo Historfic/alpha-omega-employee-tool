@@ -1,0 +1,62 @@
+# Secrets — NEVER commit
+n8n_api.txt
+*.key
+*.pem
+.env
+.env.*
+
+# Workflow snapshots — these may contain credential IDs, exec data, etc.
+.wf-snapshot.json
+.wf-current.json
+.wf-put.json
+.wf-put-resp.json
+.exec.json
+.probe*.txt
+.probe*.json
+.sheet*.csv
+
+# Scratch scripts used while editing the n8n workflow
+.migrate*.py
+.timemigrate.py
+.shiftpatch.py
+.pmshift.py
+.dateparse.py
+.datefmt.py
+.numeric.py
+.openfix.py
+.swapback.py
+.closerows.py
+.fixrow50.py
+.retest.py
+.shifttest.py
+.darkmode.py
+.mobile.py
+.meaning.py
+.patch.py
+.verses.py
+.render.py
+.rename.py
+.revert.py
+.rotate_path.py
+.make_qrs.py
+.patch_workflow.py
+.tabs.py
+.cred-schema.json
+
+# Live response captures
+.live*.html
+.test-resp.html
+.old-qr-test.html
+.in.html
+.out.html
+
+# Python
+__pycache__/
+*.pyc
+venv/
+.venv/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
