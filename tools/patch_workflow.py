@@ -18,7 +18,10 @@ def extract_core():
                   text, re.S)
     if not m:
         sys.exit("ERROR: PIVOT CORE markers not found in pivot_cells.js")
-    return m.group(1).rstrip() + "\n\nreturn buildPivotItems($input.all());\n"
+    # Read from the Decide node (canonical fields: operation, Date, Employee,
+    # display_employee, Time_in/out, Total_hours, Emergency_Log). The upstream
+    # Google Sheets node output drops these fields, so $input cannot be used.
+    return m.group(1).rstrip() + "\n\nreturn buildPivotItems($('Decide').all());\n"
 
 
 def patch_decide(node):

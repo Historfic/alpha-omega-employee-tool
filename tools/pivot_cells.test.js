@@ -4,9 +4,9 @@ const { buildPivotItems, rowIndexFor, MAX_INDEX } = require('./pivot_cells');
 // Helper: wrap raw json objects as n8n items
 const items = (...objs) => objs.map((json) => ({ json }));
 
-// rowIndexFor: 06/01/2026 -> index 1 (sheet row 2); 06/11 -> 11; bounds.
-assert.strictEqual(rowIndexFor('06/01/2026'), 1, 'Jun 1 -> index 1');
-assert.strictEqual(rowIndexFor('06/11/2026'), 11, 'Jun 11 -> index 11');
+// rowIndexFor: two header rows -> 06/01/2026 = sheet row 3 = index 2.
+assert.strictEqual(rowIndexFor('06/01/2026'), 2, 'Jun 1 -> index 2 (sheet row 3)');
+assert.strictEqual(rowIndexFor('06/11/2026'), 12, 'Jun 11 -> index 12 (sheet row 13)');
 assert.strictEqual(rowIndexFor('10/20/2026'), MAX_INDEX, 'Oct 20 -> MAX_INDEX');
 assert.strictEqual(rowIndexFor('10/21/2026'), null, 'past template -> null');
 assert.strictEqual(rowIndexFor('05/31/2026'), null, 'before template -> null');
@@ -21,7 +21,7 @@ assert.strictEqual(out.length, 1, 'Ivan in -> 1 output item');
 let reqs = out[0].json.body.requests;
 assert.strictEqual(reqs.length, 1, 'Ivan in -> 1 cell');
 assert.strictEqual(reqs[0].updateCells.range.sheetId, 1545975491);
-assert.strictEqual(reqs[0].updateCells.range.startRowIndex, 11);
+assert.strictEqual(reqs[0].updateCells.range.startRowIndex, 12, 'Jun 11 -> 0-based row index 12');
 assert.strictEqual(reqs[0].updateCells.range.startColumnIndex, 1, 'Ivan In = col B (1)');
 assert.strictEqual(reqs[0].updateCells.rows[0].values[0].userEnteredValue.stringValue, '6:02 PM');
 

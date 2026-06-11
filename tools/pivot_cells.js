@@ -4,16 +4,19 @@ const COLS = {
   Ivan:   { in: 1, out: 2, total: 7,  emergency: 10 },
   Daniel: { in: 3, out: 4, total: 8,  emergency: 11 },
 };
-const BASE_UTC = Date.UTC(2026, 5, 1);                 // 2026-06-01 = pivot row 2 (index 1)
+// The pivot tab has TWO header rows (row 1 = employee names, row 2 = Date/In/Out
+// labels), so the first data date 2026-06-01 sits on sheet row 3 = 0-based
+// index 2. Hence the "2 +" base offset below.
+const BASE_UTC = Date.UTC(2026, 5, 1);                 // 2026-06-01 = pivot row 3 (index 2)
 const MS_PER_DAY = 86400000;
-const MAX_INDEX = 1 + Math.round((Date.UTC(2026, 9, 20) - BASE_UTC) / MS_PER_DAY); // 2026-10-20
+const MAX_INDEX = 2 + Math.round((Date.UTC(2026, 9, 20) - BASE_UTC) / MS_PER_DAY); // 2026-10-20
 
 function rowIndexFor(dateStr) {
   const m = String(dateStr == null ? '' : dateStr).trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
   if (!m) return null;
   const utc = Date.UTC(Number(m[3]), Number(m[1]) - 1, Number(m[2]));
-  const idx = 1 + Math.round((utc - BASE_UTC) / MS_PER_DAY);
-  return (idx < 1 || idx > MAX_INDEX) ? null : idx;
+  const idx = 2 + Math.round((utc - BASE_UTC) / MS_PER_DAY);
+  return (idx < 2 || idx > MAX_INDEX) ? null : idx;
 }
 
 function cell(rowIndex, colIndex, value, kind) {
