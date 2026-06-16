@@ -48,25 +48,29 @@ A second tab in the same spreadsheet (gid `1545975491`) is a human-readable
 monthly timesheet: one row per date, with Ivan and Daniel side-by-side in
 columns. The `clock-in-out` workflow mirrors each scan into it in real time:
 
-- A `Build Pivot Cells` Code node (logic mirrored in `tools/pivot_cells.js`)
-  reads the canonical event off the `Decide` node and turns it into Google
-  Sheets `updateCells` requests, addressing cells by sheet **gid + row/column
-  index** (the pivot has three columns all titled "Out", so header-name writes
-  are ambiguous).
-- A `Write Pivot` HTTP node POSTs them to `spreadsheets:batchUpdate` using the
-  existing `Atutor` Google Sheets credential. It runs in parallel with the
-  Respond nodes and is set to continue-on-error, so it never blocks or breaks an
-  employee's clock-in/out.
+The pivot tab is **"Sheet2"** (gid `1545975491`) and has **two header rows**
+(row 1 = employee names, row 2 = Date/In/Out labels), so data starts on row 3.
+Live-sync pipeline added after the existing sheet write:
+
+- `Read Pivot Dates` (HTTP) reads pivot column A (`Sheet2!A1:A1000`).
+- `Build Pivot Cells` (Code; logic mirrored in `tools/pivot_cells.js`) takes the
+  canonical event from the `Decide` node, **looks up the matching date row** in
+  column A (appending a new dated row if the date is absent), and builds Google
+  Sheets `updateCells` requests addressed by **gid + row/column index** (the
+  pivot has three columns all titled "Out", so header-name writes are ambiguous).
+- `Write Pivot` (HTTP) POSTs them to `spreadsheets:batchUpdate` with the existing
+  `Atutor` credential, in parallel with the Respond nodes and continue-on-error,
+  so it never blocks or breaks an employee's clock-in/out.
 
 Mapping: `kaz`/`001` -> Ivan (cols B/C/H/K), `david`/`002` -> Daniel
 (cols D/E/I/L). **Nae's columns (F/G/J/M) are manual and never written.**
-Rows are resolved deterministically: the pivot has **two header rows**, so the
-first date `06/01/2026` is sheet row 3 (one row per day after that). When the
-timesheet is extended past `10/20/2026`, widen the date window in
-`tools/pivot_cells.js` (`MAX_INDEX`).
 
-Edit the workflow with `tools/patch_workflow.py` (requires `n8n_api.txt`).
-Unit-test the cell builder with `node tools/pivot_cells.test.js`.
+Tooling (all require `n8n_api.txt`; Windows curl needs `--ssl-no-revoke`):
+- `tools/patch_workflow.py` — add/refresh the live-sync nodes in the workflow.
+- `tools/backfill_pivot.py` — rebuild the pivot from a Sheet1 CSV export.
+- `tools/reconcile_pivot.py` — diff the pivot against Sheet1 and fix only the
+  wrong cells (set/clear), with a `MIN_ROW` floor to protect finalized rows.
+- `node tools/pivot_cells.test.js` — unit-test the cell builder.
 
 ## Secrets
 

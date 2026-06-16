@@ -13,7 +13,17 @@ n8n_api.txt
 .exec.json
 .probe*.txt
 .probe*.json
+.probe*.csv
+.probe*.html
 .sheet*.csv
+
+# Scratch CSV/JSON captures and temp-workflow payloads (pivot sync tooling)
+.src.csv
+.piv*.csv
+.backfill*
+.reconcile*
+.meta-*
+.rd-*
 
 # Scratch scripts used while editing the n8n workflow
 .migrate*.py

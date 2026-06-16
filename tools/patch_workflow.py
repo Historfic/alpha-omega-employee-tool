@@ -18,10 +18,15 @@ def extract_core():
                   text, re.S)
     if not m:
         sys.exit("ERROR: PIVOT CORE markers not found in pivot_cells.js")
-    # Read from the Decide node (canonical fields: operation, Date, Employee,
-    # display_employee, Time_in/out, Total_hours, Emergency_Log). The upstream
-    # Google Sheets node output drops these fields, so $input cannot be used.
-    return m.group(1).rstrip() + "\n\nreturn buildPivotItems($('Decide').all());\n"
+    # Event comes from the Decide node (canonical fields). The pivot's column A
+    # comes from the upstream "Read Pivot Dates" HTTP node (values.get with
+    # majorDimension=COLUMNS -> json.values[0] is column A).
+    wrapper = (
+        "\n\nconst __pd = $('Read Pivot Dates').first().json;\n"
+        "const __colA = (__pd && __pd.values && __pd.values[0]) || [];\n"
+        "return buildPivotItems($('Decide').all(), __colA);\n"
+    )
+    return m.group(1).rstrip() + wrapper
 
 
 def patch_decide(node):
@@ -57,7 +62,27 @@ def main():
         "name": "Build Pivot Cells",
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
+        "position": [1900, 200],
+    }
+
+    # 2b) Add Read Pivot Dates (HTTP Request) node -- reads pivot column A so
+    # Build Pivot Cells can find the row by date (lookup) or append a new one.
+    read_dates = {
+        "parameters": {
+            "method": "GET",
+            "url": ("https://sheets.googleapis.com/v4/spreadsheets/"
+                    + SPREADSHEET + "/values/Sheet2!A1:A1000?majorDimension=COLUMNS"),
+            "authentication": "predefinedCredentialType",
+            "nodeCredentialType": "googleSheetsOAuth2Api",
+            "options": {},
+        },
+        "id": str(uuid.uuid4()),
+        "name": "Read Pivot Dates",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
         "position": [1680, 200],
+        "credentials": CRED,
+        "onError": "continueRegularOutput",
     }
 
     # 3) Add Write Pivot (HTTP Request) node.
@@ -77,27 +102,28 @@ def main():
         "name": "Write Pivot",
         "type": "n8n-nodes-base.httpRequest",
         "typeVersion": 4.2,
-        "position": [1900, 200],
+        "position": [2120, 200],
         "credentials": CRED,
         "onError": "continueRegularOutput",
     }
 
     # Replace existing copies if re-running, else append.
-    nodes = [n for n in nodes if n["name"] not in ("Build Pivot Cells", "Write Pivot")]
-    nodes.extend([build, write])
+    managed = ("Read Pivot Dates", "Build Pivot Cells", "Write Pivot")
+    nodes = [n for n in nodes if n["name"] not in managed]
+    nodes.extend([read_dates, build, write])
 
-    # 4) Wire connections (parallel to the Respond nodes).
-    def add_conn(src, dst):
-        conns.setdefault(src, {}).setdefault("main", [[]])
-        if not conns[src]["main"]:
-            conns[src]["main"] = [[]]
-        targets = conns[src]["main"][0]
-        if not any(c["node"] == dst for c in targets):
-            targets.append({"node": dst, "type": "main", "index": 0})
+    # 4) Wire connections (parallel to the Respond nodes):
+    #    Append/Update -> Read Pivot Dates -> Build Pivot Cells -> Write Pivot
+    def set_targets(src, targets):
+        conns.setdefault(src, {})["main"] = [[
+            {"node": t, "type": "main", "index": 0} for t in targets]]
 
-    add_conn("Append row", "Build Pivot Cells")
-    add_conn("Update row", "Build Pivot Cells")
-    conns["Build Pivot Cells"] = {"main": [[{"node": "Write Pivot", "type": "main", "index": 0}]]}
+    # Keep each Respond node; route the pivot branch through Read Pivot Dates.
+    # (Drop any stale direct ->Build Pivot Cells link from a prior deploy.)
+    set_targets("Append row", ["Respond IN", "Read Pivot Dates"])
+    set_targets("Update row", ["Respond OUT", "Read Pivot Dates"])
+    set_targets("Read Pivot Dates", ["Build Pivot Cells"])
+    set_targets("Build Pivot Cells", ["Write Pivot"])
 
     # 5) Build the PUT body (only fields the public API accepts).
     settings = wf.get("settings", {})

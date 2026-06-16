@@ -1,22 +1,19 @@
 // === PIVOT CORE START ===
-const SHEET_ID = 1545975491;
+const SHEET_ID = 1545975491;                 // pivot tab "Sheet2"
 const COLS = {
   Ivan:   { in: 1, out: 2, total: 7,  emergency: 10 },
   Daniel: { in: 3, out: 4, total: 8,  emergency: 11 },
 };
-// The pivot tab has TWO header rows (row 1 = employee names, row 2 = Date/In/Out
-// labels), so the first data date 2026-06-01 sits on sheet row 3 = 0-based
-// index 2. Hence the "2 +" base offset below.
-const BASE_UTC = Date.UTC(2026, 5, 1);                 // 2026-06-01 = pivot row 3 (index 2)
-const MS_PER_DAY = 86400000;
-const MAX_INDEX = 2 + Math.round((Date.UTC(2026, 9, 20) - BASE_UTC) / MS_PER_DAY); // 2026-10-20
+const DATE_COL = 0;
 
-function rowIndexFor(dateStr) {
-  const m = String(dateStr == null ? '' : dateStr).trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if (!m) return null;
-  const utc = Date.UTC(Number(m[3]), Number(m[1]) - 1, Number(m[2]));
-  const idx = 2 + Math.round((utc - BASE_UTC) / MS_PER_DAY);
-  return (idx < 2 || idx > MAX_INDEX) ? null : idx;
+// Normalize any supported date string to zero-padded MM/DD/YYYY, else null.
+function normDate(s) {
+  const t = String(s == null ? '' : s).trim();
+  let m = t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (m) return m[1].padStart(2, '0') + '/' + m[2].padStart(2, '0') + '/' + m[3];
+  m = t.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (m) return m[2].padStart(2, '0') + '/' + m[3].padStart(2, '0') + '/' + m[1];
+  return null;
 }
 
 function cell(rowIndex, colIndex, value, kind) {
@@ -38,15 +35,42 @@ function cell(rowIndex, colIndex, value, kind) {
 
 function has(v) { return v !== undefined && v !== null && v !== ''; }
 
-function buildPivotItems(inputItems) {
+// decideItems: the canonical clock event(s) from the Decide node.
+// colA: pivot column A values (index 0 = sheet row 1), used to find the row.
+function buildPivotItems(decideItems, colA) {
+  // Map normalized date -> 0-based row index; track the last dated row.
+  const dateToRow = new Map();
+  let lastDatedRow = -1;
+  for (let i = 0; i < colA.length; i++) {
+    const nd = normDate(colA[i]);
+    if (nd) {
+      if (!dateToRow.has(nd)) dateToRow.set(nd, i);
+      lastDatedRow = i;
+    }
+  }
+  // No dates found at all => treat as a failed/empty read and skip, so we never
+  // append duplicate rows when the pivot lookup is unavailable.
+  if (dateToRow.size === 0) return [];
+
   const out = [];
-  for (const item of inputItems) {
+  for (const item of decideItems) {
     const j = item.json;
     const cols = COLS[j.display_employee || j.Employee];
-    if (!cols) continue;                       // not Ivan/Daniel -> skip (e.g. Nae, Unknown)
-    const rowIndex = rowIndexFor(j.Date);
-    if (rowIndex === null) continue;           // date outside template -> skip
+    if (!cols) continue;                       // not Ivan/Daniel -> skip (e.g. Nae)
+    const nd = normDate(j.Date);
+    if (!nd) continue;
+
+    let rowIndex;
+    let isNewRow = false;
+    if (dateToRow.has(nd)) {
+      rowIndex = dateToRow.get(nd);
+    } else {
+      rowIndex = lastDatedRow + 1;             // append just after the last date
+      isNewRow = true;
+    }
+
     const requests = [];
+    if (isNewRow) requests.push(cell(rowIndex, DATE_COL, nd, 'string'));
     if (j.operation === 'append') {
       if (has(j.Time_in)) requests.push(cell(rowIndex, cols.in, j.Time_in, 'string'));
     } else if (j.operation === 'update') {
@@ -61,5 +85,5 @@ function buildPivotItems(inputItems) {
 // === PIVOT CORE END ===
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { buildPivotItems, rowIndexFor, cell, COLS, SHEET_ID, MAX_INDEX };
+  module.exports = { buildPivotItems, normDate, cell, COLS, SHEET_ID };
 }
