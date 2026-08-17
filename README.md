@@ -6,7 +6,8 @@ Internal tooling for Alpha Omega: generate employee QR codes and weekly time-tra
 
 - **QR code generation** — produce a printable PDF of per-employee QR codes from `employees.csv` or a Google Sheet.
 - **Time reporting** — pull the weekly time log from Google Sheets and render an HTML summary report.
-- **Sheets client** — shared Google Sheets API wrapper used by both tools.
+- **Total_hours write-back** — fill blank `Total_hours` cells from the recorded clock times. This is the only tool here that *writes* to the sheet; the dashboard authenticates read-only and cannot.
+- **Sheets client** — shared Google Sheets API wrapper used by all three tools.
 
 ## Architecture
 
@@ -89,10 +90,12 @@ Two entry points — pick whichever you prefer. They accept the same flags.
 # Top-level dispatcher
 python main.py qr [--csv PATH] [-o OUT] [-v]
 python main.py report [--time-log PATH] [--employees PATH] [-o OUT] [-v]
+python main.py fill-hours [--break-hours N] [--rounding MODE] [--apply] [-v]
 
 # Or run each module directly
 python -m src.qr_generator --help
 python -m src.time_reporter --help
+python -m src.hours_writer --help
 ```
 
 Out of the box, with no configuration, you should see:
@@ -117,6 +120,36 @@ Common flags:
 | `-o` / `--output` | Override the output path |
 | `-v` / `--verbose` | Debug-level logging |
 | `-h` / `--help` | Show usage and exit |
+
+### `fill-hours` — writing back to the sheet
+
+This is the one command that modifies the spreadsheet, so it defaults to a
+**dry run**: it prints every cell it would change and writes nothing until you
+pass `--apply`.
+
+```bash
+# See what it would do — safe, changes nothing
+python main.py fill-hours
+
+# Actually write
+python main.py fill-hours --apply
+```
+
+It writes *payable* hours, not the raw clock span. The sheet records the span
+minus a break, rounded down — a 5 h 51 m shift is written as `5` — so writing
+the raw figure would overpay every row it touched.
+
+| Flag | Purpose |
+|---|---|
+| `--apply` | Write to the sheet. Without it, nothing changes. |
+| `--break-hours N` | Hours deducted before rounding (default `1.0`). Pass `0` for the raw span. |
+| `--rounding {floor,nearest,none}` | How the deducted figure is reduced (default `floor`). |
+| `--overwrite` | Also correct cells that already hold a *disagreeing* value. Off by default — a typed figure is a human decision. |
+| `--max-writes N` | Refuse to write more than N cells (default `200`), so a misconfigured run can't rewrite the sheet. |
+| `--time-log-sheet-id` / `--time-log-sheet-gid` | Which sheet and tab. Default to `$TIME_LOG_SHEET_ID` / `$TIME_LOG_SHEET_GID`. |
+
+Rows are left alone when the shift is still open (no `Time_out`), when the
+clock times can't be read, or when `Total_hours` already holds a value.
 
 For both tools, the source defaults to **Sheets** if the relevant `*_SHEET_ID`
 env var is set in `.env` (or the environment); otherwise it falls back to the

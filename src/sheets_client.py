@@ -101,6 +101,29 @@ class SheetsClient:
         ws = self._open_worksheet(spreadsheet_id, worksheet)
         self._call(ws.append_row, row, value_input_option=value_input_option)
 
+    def update_cells(
+        self,
+        spreadsheet_id: str,
+        updates: list[tuple[str, object]],
+        worksheet: WorksheetRef = 0,
+        *,
+        value_input_option: str = "USER_ENTERED",
+    ) -> int:
+        """Write values into specific cells. `updates` is [(A1 range, value)].
+
+        Sent as one batched request rather than a call per cell: a hundred
+        individual writes would burn the per-minute quota and leave the sheet
+        half-updated if it tripped partway through.
+
+        Returns the number of cells written.
+        """
+        if not updates:
+            return 0
+        ws = self._open_worksheet(spreadsheet_id, worksheet)
+        payload = [{"range": rng, "values": [[value]]} for rng, value in updates]
+        self._call(ws.batch_update, payload, value_input_option=value_input_option)
+        return len(updates)
+
     def get_worksheet_title(self, spreadsheet_id: str, gid: int) -> str:
         """Resolve a worksheet `gid` (from a sheet URL) to its title.
 
