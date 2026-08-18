@@ -1,0 +1,802 @@
+{
+  "name": "clock-in-out",
+  "nodes": [
+    {
+      "id": "1d7841af-0b44-42ec-9270-54249bf736f9",
+      "name": "Webhook",
+      "webhookId": "YOUR_WEBHOOK_ID",
+      "type": "n8n-nodes-base.webhook",
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "path": "YOUR_WEBHOOK_PATH",
+        "responseMode": "responseNode",
+        "options": {},
+        "httpMethod": "GET"
+      },
+      "typeVersion": 2.1
+    },
+    {
+      "id": "546e43fc-ad37-461e-b92b-a3db9fd4a418",
+      "name": "Edit Fields",
+      "type": "n8n-nodes-base.set",
+      "position": [
+        240,
+        0
+      ],
+      "parameters": {
+        "options": {},
+        "assignments": {
+          "assignments": [
+            {
+              "type": "string",
+              "name": "employee_id",
+              "id": "70476d89-4eb9-4868-b730-4f2a5c777bb2",
+              "value": "={{ $json.query.employee_id }}"
+            },
+            {
+              "type": "string",
+              "name": "action",
+              "id": "dbd3a43d-3537-4491-bf95-f71cf6f5892a",
+              "value": "={{ $json.query.action }}"
+            }
+          ]
+        }
+      },
+      "typeVersion": 3.4
+    },
+    {
+      "id": "cbe144dd-2ab7-489f-aa58-64bdf24d9178",
+      "name": "If",
+      "type": "n8n-nodes-base.if",
+      "position": [
+        480,
+        0
+      ],
+      "parameters": {
+        "options": {},
+        "conditions": {
+          "options": {
+            "version": 2,
+            "typeValidation": "loose",
+            "leftValue": "",
+            "caseSensitive": false
+          },
+          "conditions": [
+            {
+              "operator": {
+                "operation": "notEmpty",
+                "singleValue": true,
+                "type": "string"
+              },
+              "rightValue": "",
+              "id": "11111111-1111-1111-1111-111111111111",
+              "leftValue": "={{ $json.employee_id }}"
+            },
+            {
+              "operator": {
+                "operation": "regex",
+                "type": "string"
+              },
+              "rightValue": "^(in|out)$",
+              "id": "22222222-2222-2222-2222-222222222222",
+              "leftValue": "={{ $json.action }}"
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "typeVersion": 2.3
+    },
+    {
+      "alwaysOutputData": true,
+      "id": "8ad4af3b-fdd6-496f-b006-68d3b572c457",
+      "name": "Read All Rows",
+      "type": "n8n-nodes-base.googleSheets",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "YOUR_CREDENTIAL_NAME"
+        }
+      },
+      "typeVersion": 4.7,
+      "parameters": {
+        "operation": "read",
+        "sheetName": {
+          "__rl": true,
+          "value": 0,
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_SPREADSHEET_ID/edit?gid=0#gid=0"
+        },
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_SPREADSHEET_ID",
+          "mode": "list",
+          "cachedResultName": "Alpha Omega Time Log",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_SPREADSHEET_ID/edit"
+        },
+        "options": {}
+      },
+      "position": [
+        720,
+        0
+      ]
+    },
+    {
+      "id": "24b04ad5-6562-40d3-8ff8-caf7853746d6",
+      "name": "Decide",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        960,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const ef = $('Edit Fields').first().json;\nconst empId = String(ef.employee_id).padStart(3, '0');\nconst action = String(ef.action).toLowerCase();\nconst allRows = $input.all().map(i => i.json);\n\nconst employeeMap = { '001': 'Ivan', '002': 'Daniel' };\nconst employeeName = employeeMap[empId] || ('Unknown (' + empId + ')');\n\nconst now = DateTime.now().setZone('Asia/Manila');\nconst dateStr = now.toFormat('MM/dd/yyyy');\nconst timeStr = now.toFormat('h:mm a');\n\nfunction formatDuration(totalHours) {\n  if (totalHours < 1) {\n    const minutes = Math.max(0, Math.round(totalHours * 60));\n    return minutes + (minutes === 1 ? ' minute' : ' minutes');\n  }\n  return totalHours.toFixed(2) + ' hours';\n}\n\nfunction findOpenRows() {\n  return allRows.filter(r =>\n    r && r.Employee === employeeName &&\n    r.Time_in && String(r.Time_in).trim() !== '' &&\n    (!r.Time_out || r.Time_out === '' || r.Time_out === null)\n  );\n}\n\n// Evening / night-themed verse pool (modern English, public-domain references)\nconst VERSES = {\n  in_early: [\n    { text: 'Whatever your hand finds to do, do it with all your strength.', ref: 'Ecclesiastes 9:10', meaning: 'You arrived early. Use the time well.' },\n    { text: 'Trust in the Lord with all your heart, and do not rely on your own understanding.', ref: 'Proverbs 3:5', meaning: 'Settle in with trust before the night begins.' },\n    { text: 'I lift up my eyes to the hills, where does my help come from?', ref: 'Psalm 121:1', meaning: 'Strength for tonight comes from above.' },\n    { text: 'Commit your work to the Lord, and your plans will succeed.', ref: 'Proverbs 16:3', meaning: 'Offer your evening shift to God and your plans will hold.' }\n  ],\n  in_ontime: [\n    { text: 'There is a time for everything, and a season for every activity under the heavens.', ref: 'Ecclesiastes 3:1', meaning: 'Right on time. Work has its hour, and this is yours.' },\n    { text: 'When you lie down you will not be afraid; your sleep will be sweet.', ref: 'Proverbs 3:24', meaning: 'A faithful start now means peaceful sleep later.' },\n    { text: 'The end of a thing is better than its beginning.', ref: 'Ecclesiastes 7:8', meaning: 'You have started well; the finish will be even better.' },\n    { text: 'Praise the Lord, all you servants of the Lord who minister by night.', ref: 'Psalm 134:1', meaning: 'Working through the evening is an honored service.' }\n  ],\n  in_late: [\n    { text: 'Go to the ant, you who are lazy. Watch how she works, and learn from her.', ref: 'Proverbs 6:6', meaning: 'Even small creatures show up on time. Let tomorrow look different.' },\n    { text: 'Do you see someone skilled in their work? They will serve before kings.', ref: 'Proverbs 22:29', meaning: 'Diligence opens doors. Tomorrow is a chance to begin again.' },\n    { text: 'Make the most of every opportunity, because the days are evil.', ref: 'Ephesians 5:16', meaning: 'Time matters. Use it well, starting now.' },\n    { text: 'The lazy one does not plow in season, so at harvest time there is nothing.', ref: 'Proverbs 20:4', meaning: 'Putting things off has a cost later. Show up on time tomorrow.' }\n  ],\n  out_early: [\n    { text: 'Whatever you do, work at it with all your heart, as working for the Lord.', ref: 'Colossians 3:23', meaning: \"Make sure tonight's work was given your full heart.\" },\n    { text: 'The Lord will watch over your coming and going both now and forevermore.', ref: 'Psalm 121:8', meaning: 'Go safely. God watches your steps as you leave.' },\n    { text: 'Stand firm. Let nothing move you. Always give yourself fully to good work.', ref: '1 Corinthians 15:58', meaning: 'Steady, faithful effort is never wasted.' },\n    { text: 'Let your light shine before others, so they may see your good works.', ref: 'Matthew 5:16', meaning: 'Your effort speaks. Let it shine in everything you do.' }\n  ],\n  out_ontime: [\n    { text: 'In peace I will lie down and sleep, for you alone, Lord, make me dwell in safety.', ref: 'Psalm 4:8', meaning: 'Shift complete. Rest well tonight.' },\n    { text: 'I have fought the good fight, I have finished the race, I have kept the faith.', ref: '2 Timothy 4:7', meaning: 'You finished what you set out to do. Well done.' },\n    { text: 'Come to me, all who are weary and burdened, and I will give you rest.', ref: 'Matthew 11:28', meaning: \"Your shift is over. Take the rest you've earned.\" },\n    { text: 'The worker deserves their wages.', ref: 'Luke 10:7', meaning: 'Honest work is worth honest pay. You earned this.' }\n  ],\n  out_late: [\n    { text: 'He gives strength to the weary and increases the power of the weak.', ref: 'Isaiah 40:29', meaning: 'Long night. Strength to keep going comes from God.' },\n    { text: 'Let us not grow tired of doing good, in time we will reap a harvest if we do not give up.', ref: 'Galatians 6:9', meaning: 'Extra effort tonight bears fruit tomorrow.' },\n    { text: 'I have learned to be content in any situation.', ref: 'Philippians 4:11', meaning: 'Long shifts and short, both belong to God. Be at peace.' },\n    { text: 'He gives sleep to those he loves.', ref: 'Psalm 127:2', meaning: 'Rest is coming. Hold on a little longer.' },\n    { text: 'Even at night my heart instructs me.', ref: 'Psalm 16:7', meaning: 'Late nights teach what daylight cannot.' }\n  ]\n};\n\nfunction pickVerse(pool) {\n  return pool[Math.floor(Math.random() * pool.length)];\n}\n\nfunction fmtMins(mins) {\n  const total = Math.abs(mins);\n  if (total < 60) return total + ' MIN';\n  const hr = Math.floor(total / 60);\n  const rest = total % 60;\n  if (rest === 0) return hr + (hr === 1 ? ' HR' : ' HRS');\n  return hr + (hr === 1 ? ' HR ' : ' HRS ') + rest + ' MIN';\n}\n\n// PM-shift IN bucketing. Every clock-in lands in one of these — a scan\n// outside the usual window is just early or very late, never a separate\n// category, so its hours are always recorded like any other shift.\nfunction classifyIn(dt) {\n  const h = dt.hour, m = dt.minute;\n  if (h === 18 && m <= 5) return 'in_ontime';            // 6:00–6:05 PM\n  if (h === 18 && m >= 6) return 'in_late';              // 6:06–6:59 PM\n  if (h === 19 && m === 0) return 'in_late';             // 7:00 PM (inclusive)\n  if (h >= 19 && h <= 23) return 'in_brutally_late';     // 7:01–11:59 PM\n  return 'in_early';                                      // midnight–5:59 PM\n}\n\n// OUT bucketing. Post-midnight (h < 12) = overtime; 10:30–11:59 PM = on time; else = early.\nfunction classifyOut(dt) {\n  const h = dt.hour, m = dt.minute;\n  if ((h === 22 && m >= 30) || h === 23) return 'out_ontime';\n  if (h >= 0 && h < 12) return 'out_overtime';\n  return 'out_early';\n}\n\nfunction buildInStatus(shiftType, dt) {\n  const tm = dt.hour * 60 + dt.minute;\n  if (shiftType === 'in_early') {\n    return { label: 'EARLY (' + fmtMins(18*60 - tm) + ' BEFORE)', cls: 'status-good' };\n  }\n  if (shiftType === 'in_ontime') return { label: 'ON TIME', cls: 'status-good' };\n  if (shiftType === 'in_late') {\n    return { label: fmtMins(tm - 18*60) + ' LATE', cls: 'status-bad' };\n  }\n  return { label: 'BRUTALLY LATE (' + fmtMins(tm - 18*60) + ' PAST SHIFT)', cls: 'status-bad' };\n}\n\nfunction buildOutStatus(outShiftCategory, dt) {\n  const ob = classifyOut(dt);\n  const tm = dt.hour * 60 + dt.minute;\n  if (ob === 'out_early') {\n    const diff = (22*60 + 30) - tm;\n    return { label: 'EARLY OUT (' + fmtMins(diff) + ' BEFORE)', cls: 'status-info' };\n  }\n  if (ob === 'out_ontime') return { label: 'ON TIME', cls: 'status-good' };\n  // overtime — minutes past 11:00 PM. Post-midnight = 60 + tm; else = tm - 23*60.\n  let diff;\n  if (dt.hour < 12) diff = 60 + tm;\n  else diff = tm - 23*60;\n  return { label: 'OVERTIME (+' + fmtMins(diff) + ')', cls: 'status-warn' };\n}\n\nfunction inBadge(shiftType) {\n  if (shiftType === 'in_brutally_late') return { label: 'Brutally Late In', cls: 'badge-err' };\n  return { label: 'Clock In', cls: 'badge-in' };\n}\n\nfunction outBadge(outShiftCategory) {\n  if (outShiftCategory === 'brutally_late') return { label: 'Brutally Late Out', cls: 'badge-err' };\n  return { label: 'Clock Out', cls: 'badge-out' };\n}\n\nfunction inSubtitle(shiftType) {\n  if (shiftType === 'in_brutally_late') return 'You are well past shift start. Show up on time tomorrow.';\n  return 'Your scan was recorded.';\n}\n\nfunction outSubtitle(outShiftCategory) {\n  if (outShiftCategory === 'brutally_late') return 'Late in, recorded out. Show up on time tomorrow.';\n  return 'Your scan was recorded.';\n}\n\nfunction roundMin(mins) {\n  // round to nearest hour; round up when within 20 min of the next hour (>=40 min in)\n  const base = Math.floor(mins / 60);\n  return (mins % 60) >= 40 ? base + 1 : base;\n}\nfunction computeTotalHours(inDt, outDt) {\n  const workedMin = Math.max(0, Math.round(outDt.diff(inDt, 'minutes').minutes));\n  // overtime = clocked out more than 1 hour after the 11 PM target, i.e. strictly after midnight\n  const postMidnight = outDt.hour < 12;\n  const overtime = postMidnight && (outDt.hour * 60 + outDt.minute) > 0;\n  if (overtime) return roundMin(workedMin);   // overtime: actual rounded hours (only case above 5)\n  if (workedMin >= 270) return 5;             // >= 4h30m completes the fixed 5-hour shift\n  return Math.min(5, roundMin(workedMin));    // short shift: rounded actual, capped at 5\n}\nfunction hoursLabel(h) {\n  return h + (h === 1 ? ' hour' : ' hours');\n}\n\nfunction parseInDt(dateStr, timeStr) {\n  const formats = ['yyyy-MM-dd h:mm:ss a', 'MM/dd/yyyy h:mm:ss a', 'M/d/yyyy h:mm:ss a', 'yyyy-MM-dd h:mm a', 'MM/dd/yyyy h:mm a', 'M/d/yyyy h:mm a', 'yyyy-MM-dd HH:mm:ss', 'MM/dd/yyyy HH:mm:ss', 'yyyy-MM-dd HH:mm', 'MM/dd/yyyy HH:mm'];\n  for (const fmt of formats) {\n    const dt = DateTime.fromFormat(String(dateStr) + ' ' + String(timeStr), fmt, { zone: 'Asia/Manila' });\n    if (dt.isValid) return dt;\n  }\n  return null;\n}\n\nif (action === 'in') {\n  const openRows = findOpenRows();\n  if (openRows.length > 0) {\n    const openRow = openRows[openRows.length - 1];\n    return [{ json: {\n      operation: 'no_clock_out',\n      display_employee: employeeName,\n      display_date: openRow.Date,\n      display_time_in: openRow.Time_in\n    } }];\n  }\n  const shiftType = classifyIn(now);\n  let pool;\n  if (shiftType === 'in_early') pool = VERSES.in_early;\n  else if (shiftType === 'in_ontime') pool = VERSES.in_ontime;\n  else pool = VERSES.in_late;\n  const v = pickVerse(pool);\n  const s = buildInStatus(shiftType, now);\n  const b = inBadge(shiftType);\n  return [{ json: {\n    operation: 'append',\n    Date: dateStr,\n    Employee: employeeName,\n    Time_in: timeStr,\n    Time_out: '',\n    Total_hours: '',\n    display_employee: employeeName,\n    display_time: timeStr,\n    display_badge_label: b.label,\n    display_badge_class: b.cls,\n    display_subtitle: inSubtitle(shiftType),\n    display_status_label: s.label,\n    display_status_class: s.cls,\n    display_verse_text: v.text,\n    display_verse_ref: v.ref,\n    display_verse_meaning: v.meaning,\n    display_shift_type: shiftType\n  } }];\n}\n\nif (action === 'out') {\n  const open = findOpenRows();\n  if (open.length === 0) {\n    return [{ json: { operation: 'no_clock_in', display_employee: employeeName } }];\n  }\n  const row = open[open.length - 1];\n  const inDt = parseInDt(row.Date, row.Time_in);\n  if (!inDt) {\n    return [{ json: { operation: 'no_clock_in', display_employee: employeeName } }];\n  }\n  const inShift = classifyIn(inDt);\n  const outBucket = classifyOut(now);\n\n  // Every shift is totalled the same way now. There is no separate bucket\n  // that leaves Total_hours blank, so hours can no longer go unrecorded.\n  const outCat = inShift === 'in_brutally_late' ? 'brutally_late' : 'regular';\n  const totalHours = computeTotalHours(inDt, now);\n\n  let pool;\n  if (outCat === 'brutally_late') pool = VERSES.out_late;\n  else if (outBucket === 'out_early') pool = VERSES.out_early;\n  else if (outBucket === 'out_ontime') pool = VERSES.out_ontime;\n  else pool = VERSES.out_late;\n  const v = pickVerse(pool);\n\n  const s = buildOutStatus(outCat, now);\n  const b = outBadge(outCat);\n\n  return [{ json: {\n    operation: 'update',\n    row_number: row.row_number,\n    Date: row.Date,\n    Employee: employeeName,\n    Time_out: timeStr,\n    Total_hours: totalHours,\n    display_employee: employeeName,\n    display_time: timeStr,\n    display_total: hoursLabel(totalHours),\n    display_total_label: 'Total Time',\n    display_badge_label: b.label,\n    display_badge_class: b.cls,\n    display_subtitle: outSubtitle(outCat),\n    display_status_label: s.label,\n    display_status_class: s.cls,\n    display_verse_text: v.text,\n    display_verse_ref: v.ref,\n    display_verse_meaning: v.meaning,\n    display_shift_type: outCat\n  } }];\n}\n\nreturn [{ json: { operation: 'no_clock_in', display_employee: 'Unknown' } }];\n",
+        "language": "javaScript",
+        "mode": "runOnceForAllItems"
+      },
+      "typeVersion": 2
+    },
+    {
+      "id": "fea86bbc-b4d4-4d10-a63e-12dc025e21ff",
+      "name": "Switch",
+      "type": "n8n-nodes-base.switch",
+      "position": [
+        1200,
+        0
+      ],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "outputKey": "append",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "version": 2,
+                  "typeValidation": "loose",
+                  "leftValue": "",
+                  "caseSensitive": true
+                },
+                "conditions": [
+                  {
+                    "operator": {
+                      "operation": "equals",
+                      "type": "string"
+                    },
+                    "rightValue": "append",
+                    "id": "fe75e4cb-563f-4469-925a-5df45ee16ff0",
+                    "leftValue": "={{ $json.operation }}"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "update",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "version": 2,
+                  "typeValidation": "loose",
+                  "leftValue": "",
+                  "caseSensitive": true
+                },
+                "conditions": [
+                  {
+                    "operator": {
+                      "operation": "equals",
+                      "type": "string"
+                    },
+                    "rightValue": "update",
+                    "id": "8b034639-fce3-4631-9ab1-e0ba512ef05d",
+                    "leftValue": "={{ $json.operation }}"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "no_clock_in",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "version": 2,
+                  "typeValidation": "loose",
+                  "leftValue": "",
+                  "caseSensitive": true
+                },
+                "conditions": [
+                  {
+                    "operator": {
+                      "operation": "equals",
+                      "type": "string"
+                    },
+                    "rightValue": "no_clock_in",
+                    "id": "7ab579d0-46be-48ed-8b46-835d7e48af73",
+                    "leftValue": "={{ $json.operation }}"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "no_clock_out",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "version": 2,
+                  "typeValidation": "loose",
+                  "leftValue": "",
+                  "caseSensitive": true
+                },
+                "conditions": [
+                  {
+                    "operator": {
+                      "operation": "equals",
+                      "type": "string"
+                    },
+                    "rightValue": "no_clock_out",
+                    "id": "9d3f1a55-7e2b-44c4-9c1a-1f7b6a2d4e88",
+                    "leftValue": "={{ $json.operation }}"
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {},
+        "mode": "rules"
+      },
+      "typeVersion": 3.2
+    },
+    {
+      "id": "faca23d5-60d8-458e-b0df-c9520a5a56cc",
+      "name": "Append row",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "YOUR_CREDENTIAL_NAME"
+        }
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "position": [
+        1440,
+        -160
+      ],
+      "parameters": {
+        "operation": "append",
+        "columns": {
+          "value": {
+            "Date": "={{ $json.Date }}",
+            "Time_out": "={{ $json.Time_out }}",
+            "Total_hours": "={{ $json.Total_hours }}",
+            "Time_in": "={{ $json.Time_in }}",
+            "Employee": "={{ $json.Employee }}"
+          },
+          "mappingMode": "defineBelow",
+          "schema": [
+            {
+              "id": "Date",
+              "displayName": "Date",
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "required": false,
+              "defaultMatch": false
+            },
+            {
+              "id": "Employee",
+              "displayName": "Employee",
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "required": false,
+              "defaultMatch": false
+            },
+            {
+              "id": "Time_in",
+              "displayName": "Time_in",
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "required": false,
+              "defaultMatch": false
+            },
+            {
+              "id": "Time_out",
+              "displayName": "Time_out",
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "required": false,
+              "defaultMatch": false
+            },
+            {
+              "id": "Total_hours",
+              "displayName": "Total_hours",
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "required": false,
+              "defaultMatch": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "matchingColumns": [],
+          "convertFieldsToString": false
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 0,
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_SPREADSHEET_ID/edit?gid=0#gid=0"
+        },
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_SPREADSHEET_ID",
+          "mode": "list",
+          "cachedResultName": "Alpha Omega Time Log",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_SPREADSHEET_ID/edit"
+        },
+        "options": {}
+      },
+      "typeVersion": 4.7
+    },
+    {
+      "id": "6acd7ba9-3011-4af9-bd92-ee568ceda96b",
+      "name": "Update row",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "YOUR_CREDENTIAL_NAME"
+        }
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "position": [
+        1440,
+        0
+      ],
+      "parameters": {
+        "operation": "update",
+        "columns": {
+          "value": {
+            "Total_hours": "={{ $json.Total_hours }}",
+            "Time_out": "={{ $json.Time_out }}",
+            "row_number": "={{ $json.row_number }}"
+          },
+          "mappingMode": "defineBelow",
+          "schema": [
+            {
+              "removed": false,
+              "id": "row_number",
+              "required": false,
+              "readOnly": true,
+              "type": "number",
+              "display": true,
+              "canBeUsedToMatch": true,
+              "defaultMatch": true,
+              "displayName": "row_number"
+            },
+            {
+              "id": "Date",
+              "displayName": "Date",
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "required": false,
+              "defaultMatch": false
+            },
+            {
+              "id": "Employee",
+              "displayName": "Employee",
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "required": false,
+              "defaultMatch": false
+            },
+            {
+              "id": "Time_in",
+              "displayName": "Time_in",
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "required": false,
+              "defaultMatch": false
+            },
+            {
+              "id": "Time_out",
+              "displayName": "Time_out",
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "required": false,
+              "defaultMatch": false
+            },
+            {
+              "id": "Total_hours",
+              "displayName": "Total_hours",
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "required": false,
+              "defaultMatch": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "matchingColumns": [
+            "row_number"
+          ],
+          "convertFieldsToString": false
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 0,
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_SPREADSHEET_ID/edit?gid=0#gid=0"
+        },
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_SPREADSHEET_ID",
+          "mode": "list",
+          "cachedResultName": "Alpha Omega Time Log",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_SPREADSHEET_ID/edit"
+        },
+        "options": {}
+      },
+      "typeVersion": 4.7
+    },
+    {
+      "id": "5c660f84-6d81-493f-bcc7-21d0cda3f0fb",
+      "name": "Respond IN",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "position": [
+        1680,
+        -160
+      ],
+      "parameters": {
+        "responseBody": "=<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><meta name=\"theme-color\" content=\"#0f172a\"><title>{{ $('Decide').item.json.display_employee }} clocked in</title><style>*{box-sizing:border-box;margin:0;padding:0}html,body{min-height:100%}body{font-family:-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,sans-serif;background:#0f172a;color:#e2e8f0;display:flex;align-items:center;justify-content:center;min-height:100vh;min-height:100dvh;padding:max(1rem,env(safe-area-inset-top)) max(1rem,env(safe-area-inset-right)) max(1rem,env(safe-area-inset-bottom)) max(1rem,env(safe-area-inset-left));line-height:1.5;-webkit-font-smoothing:antialiased;-webkit-text-size-adjust:100%}.card{background:#1e293b;border:1px solid #334155;border-radius:1.5rem;padding:clamp(1.75rem,6vw,3rem) clamp(1.25rem,5vw,2.5rem);width:100%;max-width:30rem;box-shadow:0 14px 40px rgba(0,0,0,.5);text-align:center;margin:auto}.badge{display:inline-block;padding:.7rem 1.4rem;border-radius:999px;color:#fff;font-size:clamp(.95rem,3.5vw,1.1rem);font-weight:700;letter-spacing:.12em;text-transform:uppercase}.badge-in{background:#16a34a}.badge-out{background:#2563eb}.badge-warn{background:#d97706}.badge-err{background:#dc2626}h1{font-size:clamp(1.75rem,7vw,2.5rem);font-weight:600;margin:1.5rem 0 .5rem;color:#f1f5f9;line-height:1.2;word-break:break-word}.subtitle{color:#94a3b8;font-size:clamp(1rem,4vw,1.15rem);margin-bottom:1.5rem}.row{display:flex;justify-content:space-between;align-items:center;gap:1rem;padding:1.1rem 0;border-top:1px solid #334155;font-size:clamp(1rem,4vw,1.15rem);text-align:left}.row:last-child{border-bottom:1px solid #334155}.label{color:#94a3b8;font-size:clamp(.8rem,3vw,.95rem);text-transform:uppercase;letter-spacing:.05em;flex-shrink:0}.value{color:#f8fafc;font-weight:600;text-align:right;word-break:break-word;font-variant-numeric:tabular-nums}.msg{color:#cbd5e1;font-size:clamp(1rem,4vw,1.1rem);margin-top:1rem;line-height:1.55}.msg strong{color:#f1f5f9}.verse{margin-top:1.5rem;padding-top:1.25rem;border-top:1px solid #334155;color:#cbd5e1;font-style:italic;font-size:clamp(.95rem,3.5vw,1.05rem);line-height:1.6;text-align:center}.verse-ref{display:block;margin-top:.5rem;font-style:normal;font-weight:600;color:#94a3b8;font-size:clamp(.8rem,3vw,.9rem);letter-spacing:.03em}.status{display:inline-block;padding:.45rem 1rem;border-radius:999px;font-size:clamp(.78rem,3vw,.92rem);font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin:0 0 1.25rem 0;border:1px solid transparent}.status-good{background:rgba(22,163,74,.15);color:#4ade80;border-color:rgba(22,163,74,.45)}.status-warn{background:rgba(217,119,6,.18);color:#fbbf24;border-color:rgba(217,119,6,.45)}.status-bad{background:rgba(220,38,38,.16);color:#f87171;border-color:rgba(220,38,38,.45)}.status-info{background:rgba(37,99,235,.16);color:#60a5fa;border-color:rgba(37,99,235,.45)}.verse-meaning{display:block;margin-top:.85rem;font-style:normal;font-weight:400;color:#94a3b8;font-size:clamp(.85rem,3.2vw,.95rem);line-height:1.5}</style></head><body><main class=\"card\"><span class=\"badge {{ $('Decide').item.json.display_badge_class }}\">{{ $('Decide').item.json.display_badge_label }}</span><h1>{{ $('Decide').item.json.display_employee }}</h1><p class=\"subtitle\">{{ $('Decide').item.json.display_subtitle }}</p><div class=\"status {{ $('Decide').item.json.display_status_class }}\">{{ $('Decide').item.json.display_status_label }}</div><div class=\"row\"><span class=\"label\">Time In</span><span class=\"value\">{{ $('Decide').item.json.display_time }}</span></div><div class=\"verse\">&ldquo;{{ $('Decide').item.json.display_verse_text }}&rdquo;<span class=\"verse-ref\">&mdash; {{ $('Decide').item.json.display_verse_ref }}</span><span class=\"verse-meaning\">{{ $('Decide').item.json.display_verse_meaning }}</span></div></main></body></html>",
+        "respondWith": "text",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "value": "text/html; charset=utf-8",
+                "name": "Content-Type"
+              }
+            ]
+          }
+        }
+      },
+      "typeVersion": 1.5
+    },
+    {
+      "id": "ecf4e75b-c761-47fe-a830-762a47129eff",
+      "name": "Respond OUT",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "position": [
+        1680,
+        0
+      ],
+      "parameters": {
+        "responseBody": "=<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><meta name=\"theme-color\" content=\"#0f172a\"><title>{{ $('Decide').item.json.display_employee }} clocked out</title><style>*{box-sizing:border-box;margin:0;padding:0}html,body{min-height:100%}body{font-family:-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,sans-serif;background:#0f172a;color:#e2e8f0;display:flex;align-items:center;justify-content:center;min-height:100vh;min-height:100dvh;padding:max(1rem,env(safe-area-inset-top)) max(1rem,env(safe-area-inset-right)) max(1rem,env(safe-area-inset-bottom)) max(1rem,env(safe-area-inset-left));line-height:1.5;-webkit-font-smoothing:antialiased;-webkit-text-size-adjust:100%}.card{background:#1e293b;border:1px solid #334155;border-radius:1.5rem;padding:clamp(1.75rem,6vw,3rem) clamp(1.25rem,5vw,2.5rem);width:100%;max-width:30rem;box-shadow:0 14px 40px rgba(0,0,0,.5);text-align:center;margin:auto}.badge{display:inline-block;padding:.7rem 1.4rem;border-radius:999px;color:#fff;font-size:clamp(.95rem,3.5vw,1.1rem);font-weight:700;letter-spacing:.12em;text-transform:uppercase}.badge-in{background:#16a34a}.badge-out{background:#2563eb}.badge-warn{background:#d97706}.badge-err{background:#dc2626}h1{font-size:clamp(1.75rem,7vw,2.5rem);font-weight:600;margin:1.5rem 0 .5rem;color:#f1f5f9;line-height:1.2;word-break:break-word}.subtitle{color:#94a3b8;font-size:clamp(1rem,4vw,1.15rem);margin-bottom:1.5rem}.row{display:flex;justify-content:space-between;align-items:center;gap:1rem;padding:1.1rem 0;border-top:1px solid #334155;font-size:clamp(1rem,4vw,1.15rem);text-align:left}.row:last-child{border-bottom:1px solid #334155}.label{color:#94a3b8;font-size:clamp(.8rem,3vw,.95rem);text-transform:uppercase;letter-spacing:.05em;flex-shrink:0}.value{color:#f8fafc;font-weight:600;text-align:right;word-break:break-word;font-variant-numeric:tabular-nums}.msg{color:#cbd5e1;font-size:clamp(1rem,4vw,1.1rem);margin-top:1rem;line-height:1.55}.msg strong{color:#f1f5f9}.verse{margin-top:1.5rem;padding-top:1.25rem;border-top:1px solid #334155;color:#cbd5e1;font-style:italic;font-size:clamp(.95rem,3.5vw,1.05rem);line-height:1.6;text-align:center}.verse-ref{display:block;margin-top:.5rem;font-style:normal;font-weight:600;color:#94a3b8;font-size:clamp(.8rem,3vw,.9rem);letter-spacing:.03em}.status{display:inline-block;padding:.45rem 1rem;border-radius:999px;font-size:clamp(.78rem,3vw,.92rem);font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin:0 0 1.25rem 0;border:1px solid transparent}.status-good{background:rgba(22,163,74,.15);color:#4ade80;border-color:rgba(22,163,74,.45)}.status-warn{background:rgba(217,119,6,.18);color:#fbbf24;border-color:rgba(217,119,6,.45)}.status-bad{background:rgba(220,38,38,.16);color:#f87171;border-color:rgba(220,38,38,.45)}.status-info{background:rgba(37,99,235,.16);color:#60a5fa;border-color:rgba(37,99,235,.45)}.verse-meaning{display:block;margin-top:.85rem;font-style:normal;font-weight:400;color:#94a3b8;font-size:clamp(.85rem,3.2vw,.95rem);line-height:1.5}</style></head><body><main class=\"card\"><span class=\"badge {{ $('Decide').item.json.display_badge_class }}\">{{ $('Decide').item.json.display_badge_label }}</span><h1>{{ $('Decide').item.json.display_employee }}</h1><p class=\"subtitle\">{{ $('Decide').item.json.display_subtitle }}</p><div class=\"status {{ $('Decide').item.json.display_status_class }}\">{{ $('Decide').item.json.display_status_label }}</div><div class=\"row\"><span class=\"label\">Time Out</span><span class=\"value\">{{ $('Decide').item.json.display_time }}</span></div><div class=\"row\"><span class=\"label\">{{ $('Decide').item.json.display_total_label }}</span><span class=\"value\">{{ $('Decide').item.json.display_total }}</span></div><div class=\"verse\">&ldquo;{{ $('Decide').item.json.display_verse_text }}&rdquo;<span class=\"verse-ref\">&mdash; {{ $('Decide').item.json.display_verse_ref }}</span><span class=\"verse-meaning\">{{ $('Decide').item.json.display_verse_meaning }}</span></div></main></body></html>",
+        "respondWith": "text",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "value": "text/html; charset=utf-8",
+                "name": "Content-Type"
+              }
+            ]
+          }
+        }
+      },
+      "typeVersion": 1.5
+    },
+    {
+      "id": "54444bb1-199c-44bc-86bb-55e3b724f88e",
+      "name": "Respond No Clock-in",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "position": [
+        1440,
+        180
+      ],
+      "parameters": {
+        "responseBody": "=<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><meta name=\"theme-color\" content=\"#0f172a\"><title>No clock-in found</title><style>*{box-sizing:border-box;margin:0;padding:0}html,body{min-height:100%}body{font-family:-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,sans-serif;background:#0f172a;color:#e2e8f0;display:flex;align-items:center;justify-content:center;min-height:100vh;min-height:100dvh;padding:max(1rem,env(safe-area-inset-top)) max(1rem,env(safe-area-inset-right)) max(1rem,env(safe-area-inset-bottom)) max(1rem,env(safe-area-inset-left));line-height:1.5;-webkit-font-smoothing:antialiased;-webkit-text-size-adjust:100%}.card{background:#1e293b;border:1px solid #334155;border-radius:1.5rem;padding:clamp(1.75rem,6vw,3rem) clamp(1.25rem,5vw,2.5rem);width:100%;max-width:30rem;box-shadow:0 14px 40px rgba(0,0,0,.5);text-align:center;margin:auto}.badge{display:inline-block;padding:.7rem 1.4rem;border-radius:999px;color:#fff;font-size:clamp(.95rem,3.5vw,1.1rem);font-weight:700;letter-spacing:.12em;text-transform:uppercase}.badge-in{background:#16a34a}.badge-out{background:#2563eb}.badge-warn{background:#d97706}.badge-err{background:#dc2626}h1{font-size:clamp(1.75rem,7vw,2.5rem);font-weight:600;margin:1.5rem 0 .5rem;color:#f1f5f9;line-height:1.2;word-break:break-word}.subtitle{color:#94a3b8;font-size:clamp(1rem,4vw,1.15rem);margin-bottom:1.5rem}.row{display:flex;justify-content:space-between;align-items:center;gap:1rem;padding:1.1rem 0;border-top:1px solid #334155;font-size:clamp(1rem,4vw,1.15rem);text-align:left}.row:last-child{border-bottom:1px solid #334155}.label{color:#94a3b8;font-size:clamp(.8rem,3vw,.95rem);text-transform:uppercase;letter-spacing:.05em;flex-shrink:0}.value{color:#f8fafc;font-weight:600;text-align:right;word-break:break-word;font-variant-numeric:tabular-nums}.msg{color:#cbd5e1;font-size:clamp(1rem,4vw,1.1rem);margin-top:1rem;line-height:1.55}.msg strong{color:#f1f5f9}</style></head><body><main class=\"card\"><span class=\"badge badge-warn\">Not clocked in</span><h1>{{ $('Decide').item.json.display_employee }}</h1><p class=\"msg\">You haven't clocked in yet today. Please scan your <strong>Clock In</strong> QR code first.</p></main></body></html>",
+        "respondWith": "text",
+        "options": {
+          "responseCode": 400,
+          "responseHeaders": {
+            "entries": [
+              {
+                "value": "text/html; charset=utf-8",
+                "name": "Content-Type"
+              }
+            ]
+          }
+        }
+      },
+      "typeVersion": 1.5
+    },
+    {
+      "id": "032e9139-3547-46eb-ac8b-fd24737feff9",
+      "name": "Respond Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "position": [
+        720,
+        200
+      ],
+      "parameters": {
+        "responseBody": "=<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><meta name=\"theme-color\" content=\"#0f172a\"><title>Scan failed</title><style>*{box-sizing:border-box;margin:0;padding:0}html,body{min-height:100%}body{font-family:-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,sans-serif;background:#0f172a;color:#e2e8f0;display:flex;align-items:center;justify-content:center;min-height:100vh;min-height:100dvh;padding:max(1rem,env(safe-area-inset-top)) max(1rem,env(safe-area-inset-right)) max(1rem,env(safe-area-inset-bottom)) max(1rem,env(safe-area-inset-left));line-height:1.5;-webkit-font-smoothing:antialiased;-webkit-text-size-adjust:100%}.card{background:#1e293b;border:1px solid #334155;border-radius:1.5rem;padding:clamp(1.75rem,6vw,3rem) clamp(1.25rem,5vw,2.5rem);width:100%;max-width:30rem;box-shadow:0 14px 40px rgba(0,0,0,.5);text-align:center;margin:auto}.badge{display:inline-block;padding:.7rem 1.4rem;border-radius:999px;color:#fff;font-size:clamp(.95rem,3.5vw,1.1rem);font-weight:700;letter-spacing:.12em;text-transform:uppercase}.badge-in{background:#16a34a}.badge-out{background:#2563eb}.badge-warn{background:#d97706}.badge-err{background:#dc2626}h1{font-size:clamp(1.75rem,7vw,2.5rem);font-weight:600;margin:1.5rem 0 .5rem;color:#f1f5f9;line-height:1.2;word-break:break-word}.subtitle{color:#94a3b8;font-size:clamp(1rem,4vw,1.15rem);margin-bottom:1.5rem}.row{display:flex;justify-content:space-between;align-items:center;gap:1rem;padding:1.1rem 0;border-top:1px solid #334155;font-size:clamp(1rem,4vw,1.15rem);text-align:left}.row:last-child{border-bottom:1px solid #334155}.label{color:#94a3b8;font-size:clamp(.8rem,3vw,.95rem);text-transform:uppercase;letter-spacing:.05em;flex-shrink:0}.value{color:#f8fafc;font-weight:600;text-align:right;word-break:break-word;font-variant-numeric:tabular-nums}.msg{color:#cbd5e1;font-size:clamp(1rem,4vw,1.1rem);margin-top:1rem;line-height:1.55}.msg strong{color:#f1f5f9}</style></head><body><main class=\"card\"><span class=\"badge badge-err\">Scan failed</span><h1>This QR code looks broken</h1><p class=\"msg\">We need both <code>employee_id</code> and a valid <code>action</code> (in or out). Please try again or contact your supervisor.</p></main></body></html>",
+        "respondWith": "text",
+        "options": {
+          "responseCode": 400,
+          "responseHeaders": {
+            "entries": [
+              {
+                "value": "text/html; charset=utf-8",
+                "name": "Content-Type"
+              }
+            ]
+          }
+        }
+      },
+      "typeVersion": 1.5
+    },
+    {
+      "id": "7b1d2e4a-9c66-4f3b-8a51-2d6e9f0c1a55",
+      "name": "Respond No Clock-out",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "position": [
+        1440,
+        340
+      ],
+      "parameters": {
+        "responseBody": "=<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><meta name=\"theme-color\" content=\"#0f172a\"><title>Already clocked in</title><style>*{box-sizing:border-box;margin:0;padding:0}html,body{min-height:100%}body{font-family:-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,sans-serif;background:#0f172a;color:#e2e8f0;display:flex;align-items:center;justify-content:center;min-height:100vh;min-height:100dvh;padding:max(1rem,env(safe-area-inset-top)) max(1rem,env(safe-area-inset-right)) max(1rem,env(safe-area-inset-bottom)) max(1rem,env(safe-area-inset-left));line-height:1.5;-webkit-font-smoothing:antialiased;-webkit-text-size-adjust:100%}.card{background:#1e293b;border:1px solid #334155;border-radius:1.5rem;padding:clamp(1.75rem,6vw,3rem) clamp(1.25rem,5vw,2.5rem);width:100%;max-width:30rem;box-shadow:0 14px 40px rgba(0,0,0,.5);text-align:center;margin:auto}.badge{display:inline-block;padding:.7rem 1.4rem;border-radius:999px;color:#fff;font-size:clamp(.95rem,3.5vw,1.1rem);font-weight:700;letter-spacing:.12em;text-transform:uppercase}.badge-in{background:#16a34a}.badge-out{background:#2563eb}.badge-warn{background:#d97706}.badge-err{background:#dc2626}h1{font-size:clamp(1.75rem,7vw,2.5rem);font-weight:600;margin:1.5rem 0 .5rem;color:#f1f5f9;line-height:1.2;word-break:break-word}.subtitle{color:#94a3b8;font-size:clamp(1rem,4vw,1.15rem);margin-bottom:1.5rem}.row{display:flex;justify-content:space-between;align-items:center;gap:1rem;padding:1.1rem 0;border-top:1px solid #334155;font-size:clamp(1rem,4vw,1.15rem);text-align:left}.row:last-child{border-bottom:1px solid #334155}.label{color:#94a3b8;font-size:clamp(.8rem,3vw,.95rem);text-transform:uppercase;letter-spacing:.05em;flex-shrink:0}.value{color:#f8fafc;font-weight:600;text-align:right;word-break:break-word;font-variant-numeric:tabular-nums}.msg{color:#cbd5e1;font-size:clamp(1rem,4vw,1.1rem);margin-top:1rem;line-height:1.55}.msg strong{color:#f1f5f9}</style></head><body><main class=\"card\"><span class=\"badge badge-warn\">Already clocked in</span><h1>{{ $('Decide').item.json.display_employee }}</h1><p class=\"msg\">You're already clocked in since <strong>{{ $('Decide').item.json.display_time_in }}</strong> on <strong>{{ $('Decide').item.json.display_date }}</strong>. If you're leaving, please scan your <strong>Clock Out</strong> QR code instead.</p><div class=\"row\"><span class=\"label\">Clocked in</span><span class=\"value\">{{ $('Decide').item.json.display_time_in }}</span></div></main></body></html>",
+        "respondWith": "text",
+        "options": {
+          "responseCode": 400,
+          "responseHeaders": {
+            "entries": [
+              {
+                "value": "text/html; charset=utf-8",
+                "name": "Content-Type"
+              }
+            ]
+          }
+        }
+      },
+      "typeVersion": 1.5
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://sheets.googleapis.com/v4/spreadsheets/YOUR_SPREADSHEET_ID/values/Sheet2!A1:A1000?majorDimension=COLUMNS",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "options": {}
+      },
+      "id": "520ab189-5851-4f71-b757-33febe0f50be",
+      "name": "Read Pivot Dates",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1680,
+        200
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "YOUR_CREDENTIAL_NAME"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const SHEET_ID = 1545975491;                 // pivot tab \"Sheet2\"\nconst COLS = {\n  Ivan:   { in: 1, out: 2, total: 7 },\n  Daniel: { in: 3, out: 4, total: 8 },\n};\nconst DATE_COL = 0;\n\n// Normalize any supported date string to zero-padded MM/DD/YYYY, else null.\nfunction normDate(s) {\n  const t = String(s == null ? '' : s).trim();\n  let m = t.match(/^(\\d{1,2})\\/(\\d{1,2})\\/(\\d{4})$/);\n  if (m) return m[1].padStart(2, '0') + '/' + m[2].padStart(2, '0') + '/' + m[3];\n  m = t.match(/^(\\d{4})-(\\d{1,2})-(\\d{1,2})$/);\n  if (m) return m[2].padStart(2, '0') + '/' + m[3].padStart(2, '0') + '/' + m[1];\n  return null;\n}\n\nfunction cell(rowIndex, colIndex, value, kind) {\n  const userEnteredValue = kind === 'number'\n    ? { numberValue: Number(value) }\n    : { stringValue: String(value) };\n  return {\n    updateCells: {\n      range: {\n        sheetId: SHEET_ID,\n        startRowIndex: rowIndex, endRowIndex: rowIndex + 1,\n        startColumnIndex: colIndex, endColumnIndex: colIndex + 1,\n      },\n      rows: [{ values: [{ userEnteredValue }] }],\n      fields: 'userEnteredValue',\n    },\n  };\n}\n\nfunction has(v) { return v !== undefined && v !== null && v !== ''; }\n\n// decideItems: the canonical clock event(s) from the Decide node.\n// colA: pivot column A values (index 0 = sheet row 1), used to find the row.\nfunction buildPivotItems(decideItems, colA) {\n  // Map normalized date -> 0-based row index; track the last dated row.\n  const dateToRow = new Map();\n  let lastDatedRow = -1;\n  for (let i = 0; i < colA.length; i++) {\n    const nd = normDate(colA[i]);\n    if (nd) {\n      if (!dateToRow.has(nd)) dateToRow.set(nd, i);\n      lastDatedRow = i;\n    }\n  }\n  // No dates found at all => treat as a failed/empty read and skip, so we never\n  // append duplicate rows when the pivot lookup is unavailable.\n  if (dateToRow.size === 0) return [];\n\n  const out = [];\n  for (const item of decideItems) {\n    const j = item.json;\n    const cols = COLS[j.display_employee || j.Employee];\n    if (!cols) continue;                       // not Ivan/Daniel -> skip (e.g. Nae)\n    const nd = normDate(j.Date);\n    if (!nd) continue;\n\n    let rowIndex;\n    let isNewRow = false;\n    if (dateToRow.has(nd)) {\n      rowIndex = dateToRow.get(nd);\n    } else {\n      rowIndex = lastDatedRow + 1;             // append just after the last date\n      isNewRow = true;\n    }\n\n    const requests = [];\n    if (isNewRow) requests.push(cell(rowIndex, DATE_COL, nd, 'string'));\n    if (j.operation === 'append') {\n      if (has(j.Time_in)) requests.push(cell(rowIndex, cols.in, j.Time_in, 'string'));\n    } else if (j.operation === 'update') {\n      if (has(j.Time_out))      requests.push(cell(rowIndex, cols.out,       j.Time_out,      'string'));\n      if (has(j.Total_hours))   requests.push(cell(rowIndex, cols.total,     j.Total_hours,   'number'));\n    }\n    if (requests.length) out.push({ json: { body: { requests } } });\n  }\n  return out;\n}\n\nconst __pd = $('Read Pivot Dates').first().json;\nconst __colA = (__pd && __pd.values && __pd.values[0]) || [];\nreturn buildPivotItems($('Decide').all(), __colA);\n"
+      },
+      "id": "b71b27b3-64d4-495b-8899-384137a16595",
+      "name": "Build Pivot Cells",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1900,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://sheets.googleapis.com/v4/spreadsheets/YOUR_SPREADSHEET_ID:batchUpdate",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}",
+        "options": {}
+      },
+      "id": "e3e0b06d-2260-4acb-822a-a49d49e062ef",
+      "name": "Write Pivot",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2120,
+        200
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "YOUR_CREDENTIAL_NAME"
+        }
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Read All Rows",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read All Rows": {
+      "main": [
+        [
+          {
+            "node": "Decide",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decide": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "Append row",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update row",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond No Clock-in",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond No Clock-out",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append row": {
+      "main": [
+        [
+          {
+            "node": "Respond IN",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Read Pivot Dates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update row": {
+      "main": [
+        [
+          {
+            "node": "Respond OUT",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Read Pivot Dates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Pivot Cells": {
+      "main": [
+        [
+          {
+            "node": "Write Pivot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Pivot Dates": {
+      "main": [
+        [
+          {
+            "node": "Build Pivot Cells",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false,
+    "errorWorkflow": "rRTsQNBidIdyojy0"
+  }
+}
