@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import argparse
 import logging
-import math
 import os
 import re
 import sys
@@ -34,9 +33,8 @@ COL_DATE, COL_EMPLOYEE, COL_TIME_IN, COL_TIME_OUT, COL_TOTAL = range(5)
 TOTAL_COLUMN_LETTER = "E"
 SHEET_RANGE = "A:E"
 
-DEFAULT_BREAK_HOURS = 1.0
-DEFAULT_ROUNDING = "floor"
-ROUNDING_CHOICES = ("floor", "nearest", "none")
+# Minutes past the hour at which the total rounds up instead of down.
+ROUND_UP_AT_MINUTES = 40
 
 # No shift here runs longer than this. A computed span beyond it means the
 # clock times are unusable, not that somebody worked sixteen hours.
@@ -77,14 +75,15 @@ def parse_time_of_day(value: str) -> int | None:
     return hour * 60 + minute
 
 
-def payable_hours(
-    time_in: str,
-    time_out: str,
-    *,
-    break_hours: float = DEFAULT_BREAK_HOURS,
-    rounding: str = DEFAULT_ROUNDING,
-) -> float | None:
-    """What Total_hours should say for a shift, or None if it can't be derived."""
+def payable_hours(time_in: str, time_out: str) -> float | None:
+    """What Total_hours should say for a shift, or None if it can't be derived.
+
+    Every clocked hour is paid, rounded to the hour and rounding up from 40
+    minutes past. This mirrors `computeTotalHours` in the n8n Decide node and
+    `expectedShiftHours` in the dashboard's lib/reconcile.ts. All three must
+    agree: this one deducted a one-hour break long after the other two stopped
+    doing so, which would have written figures the dashboard flags as wrong.
+    """
     start = parse_time_of_day(time_in)
     end = parse_time_of_day(time_out)
     if start is None or end is None:
@@ -94,20 +93,11 @@ def payable_hours(
     # Both cells carry the same date, so a shift past midnight reads negative.
     if minutes <= 0:
         minutes += 24 * 60
-    hours = minutes / 60.0
-    if hours <= 0 or hours > MAX_SHIFT_HOURS:
+    if minutes <= 0 or minutes > MAX_SHIFT_HOURS * 60:
         return None
 
-    net = hours - break_hours
-    if net <= 0:
-        return 0.0
-    if rounding == "floor":
-        return float(math.floor(net))
-    if rounding == "nearest":
-        # floor(x + 0.5), not Python's round(), which rounds halves to even
-        # and would disagree with the dashboard on exact .5 values.
-        return float(math.floor(net + 0.5))
-    return round(net, 2)
+    base, rest = divmod(minutes, 60)
+    return float(base + 1) if rest >= ROUND_UP_AT_MINUTES else float(base)
 
 
 def _cell(row: Sequence[str], index: int) -> str:
@@ -145,8 +135,6 @@ class Update:
 def build_plan(
     rows: Iterable[Sequence[str]],
     *,
-    break_hours: float = DEFAULT_BREAK_HOURS,
-    rounding: str = DEFAULT_ROUNDING,
     overwrite: bool = False,
 ) -> tuple[list[Update], list[str]]:
     """Work out which Total_hours cells to fill.
@@ -180,9 +168,7 @@ def build_plan(
         if not time_out:
             continue  # still clocked in; nothing to total yet
 
-        computed = payable_hours(
-            time_in, time_out, break_hours=break_hours, rounding=rounding
-        )
+        computed = payable_hours(time_in, time_out)
         if computed is None:
             if not current:
                 skipped.append(
@@ -250,21 +236,6 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
-        "--break-hours",
-        type=float,
-        default=DEFAULT_BREAK_HOURS,
-        help=(
-            "Hours deducted from the clock span before rounding "
-            f"(default: {DEFAULT_BREAK_HOURS}). Pass 0 to write the raw span."
-        ),
-    )
-    parser.add_argument(
-        "--rounding",
-        choices=ROUNDING_CHOICES,
-        default=DEFAULT_ROUNDING,
-        help=f"How to round the deducted figure (default: {DEFAULT_ROUNDING}).",
-    )
-    parser.add_argument(
         "--overwrite",
         action="store_true",
         help=(
@@ -309,9 +280,6 @@ def main(argv: Sequence[str] | None = None) -> int:
             file=sys.stderr,
         )
         return EXIT_BAD_INPUT
-    if args.break_hours < 0:
-        print("error: --break-hours cannot be negative", file=sys.stderr)
-        return EXIT_BAD_INPUT
 
     try:
         from src.sheets_client import SheetsAuthError, SheetsClient, SheetsClientError
@@ -339,19 +307,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         print("Sheet has no data rows — nothing to do.")
         return EXIT_OK
 
-    updates, skipped = build_plan(
-        rows,
-        break_hours=args.break_hours,
-        rounding=args.rounding,
-        overwrite=args.overwrite,
-    )
+    updates, skipped = build_plan(rows, overwrite=args.overwrite)
 
-    policy = (
-        f"clock span − {args.break_hours:g} h break, rounded {args.rounding}"
-        if args.break_hours
-        else f"raw clock span, rounded {args.rounding}"
+    print(
+        f"Rule: every clocked hour, rounded to the hour "
+        f"(up from {ROUND_UP_AT_MINUTES} min past)"
     )
-    print(f"Rule: {policy}")
     print(f"Mode: {'blank cells and disagreements' if args.overwrite else 'blank cells only'}")
     print()
 

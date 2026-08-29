@@ -135,15 +135,15 @@ python main.py fill-hours
 python main.py fill-hours --apply
 ```
 
-It writes *payable* hours, not the raw clock span. The sheet records the span
-minus a break, rounded down — a 5 h 51 m shift is written as `5` — so writing
-the raw figure would overpay every row it touched.
+It writes every clocked hour, rounded to the hour and rounding up from 40
+minutes past — the same rule the n8n workflow applies when someone scans out.
+That rule lives in three places (here, the workflow's `Decide` node, and the
+dashboard's `lib/reconcile.ts`) and all three must agree, or the sheet and the
+screen disagree about pay.
 
 | Flag | Purpose |
 |---|---|
 | `--apply` | Write to the sheet. Without it, nothing changes. |
-| `--break-hours N` | Hours deducted before rounding (default `1.0`). Pass `0` for the raw span. |
-| `--rounding {floor,nearest,none}` | How the deducted figure is reduced (default `floor`). |
 | `--overwrite` | Also correct cells that already hold a *disagreeing* value. Off by default — a typed figure is a human decision. |
 | `--max-writes N` | Refuse to write more than N cells (default `200`), so a misconfigured run can't rewrite the sheet. |
 | `--time-log-sheet-id` / `--time-log-sheet-gid` | Which sheet and tab. Default to `$TIME_LOG_SHEET_ID` / `$TIME_LOG_SHEET_GID`. |

@@ -42,32 +42,33 @@ class TestParseTimeOfDay:
 
 
 class TestPayableHours:
-    def test_deducts_break_and_rounds_down(self):
-        # 5:38 PM -> 12:04 AM is 6.43 h; the sheet records 5.
-        assert payable_hours("5:38 PM", "12:04 AM") == 5.0
+    """Every clocked hour, rounded to the hour, up from 40 minutes past.
 
-    def test_handles_a_shift_past_midnight(self):
-        assert payable_hours("8:00 PM", "3:00 AM", break_hours=0) == 7.0
+    This must match `computeTotalHours` in the n8n Decide node and
+    `expectedShiftHours` in the dashboard. Three copies of one rule; if these
+    tests and those disagree, the sheet and the screen disagree about pay.
+    """
 
-    def test_raw_span_with_no_break(self):
-        assert payable_hours("6:00 PM", "11:00 PM", break_hours=0) == 5.0
+    def test_pays_the_hours_on_the_clock(self):
+        assert payable_hours("6:00 PM", "11:00 PM") == 5.0
+        assert payable_hours("3:00 PM", "11:00 PM") == 8.0
 
-    def test_rounding_nearest_rounds_halves_up(self):
-        # Python's round() would give 4 here; the dashboard gives 5.
-        assert payable_hours(
-            "6:00 PM", "11:30 PM", break_hours=0, rounding="nearest"
-        ) == 6.0
-        assert payable_hours(
-            "6:00 PM", "10:30 PM", break_hours=0, rounding="nearest"
-        ) == 5.0
+    def test_rounds_down_under_40_minutes_past(self):
+        assert payable_hours("6:00 PM", "9:39 PM") == 3.0
 
-    def test_rounding_none_keeps_the_decimal(self):
-        assert payable_hours(
-            "6:00 PM", "11:23 PM", break_hours=0, rounding="none"
-        ) == 5.38
+    def test_rounds_up_from_40_minutes_past(self):
+        assert payable_hours("6:00 PM", "9:40 PM") == 4.0
 
-    def test_never_negative_when_break_exceeds_shift(self):
-        assert payable_hours("6:00 PM", "6:30 PM", break_hours=1) == 0.0
+    def test_pays_early_arrival(self):
+        # Hours are flexible against a five-hour target: in early, out early.
+        assert payable_hours("3:18 PM", "8:18 PM") == 5.0
+        assert payable_hours("4:30 PM", "11:03 PM") == 6.0
+
+    def test_counts_through_midnight(self):
+        assert payable_hours("8:00 PM", "3:00 AM") == 7.0
+        # Minutes apart, and no cliff between them.
+        assert payable_hours("6:00 PM", "11:59 PM") == 6.0
+        assert payable_hours("6:00 PM", "12:03 AM") == 6.0
 
     def test_refuses_an_implausible_span(self):
         # 6 AM -> 5 AM becomes 23 h after the midnight adjustment: bad data.
@@ -84,7 +85,7 @@ class TestBuildPlan:
         updates, _ = build_plan(rows)
         assert len(updates) == 1
         assert updates[0].a1 == "E2"  # header is row 1
-        assert updates[0].proposed == 6.0  # 7.38 − 1, floored
+        assert updates[0].proposed == 7.0  # 7h23m on the clock
 
     def test_row_numbers_track_the_sheet(self):
         rows = [
@@ -112,10 +113,11 @@ class TestBuildPlan:
         updates, _ = build_plan(rows, overwrite=True)
         assert len(updates) == 1
         assert updates[0].current == "5"
-        assert updates[0].proposed == 6.0
+        assert updates[0].proposed == 7.0
 
     def test_overwrite_leaves_an_agreeing_row_alone(self):
-        rows = [HEADER, ["2026-08-12", "Ivan", "6:00 PM", "11:00 PM", "4"]]
+        # 5 h on the clock, and the cell already says 5.
+        rows = [HEADER, ["2026-08-12", "Ivan", "6:00 PM", "11:00 PM", "5"]]
         updates, _ = build_plan(rows, overwrite=True)
         assert updates == []
 
@@ -140,7 +142,7 @@ class TestBuildPlan:
         rows = [HEADER, ["2026-08-14", "Ivan", "6:00 PM", "11:00 PM"]]
         updates, _ = build_plan(rows)
         assert len(updates) == 1
-        assert updates[0].proposed == 4.0
+        assert updates[0].proposed == 5.0
 
     def test_leaves_a_non_numeric_total_alone(self):
         rows = [HEADER, ["2026-08-14", "Ivan", "6:00 PM", "11:00 PM", "n/a"]]
@@ -148,9 +150,9 @@ class TestBuildPlan:
         assert updates == []
         assert "isn't a number" in skipped[0]
 
-    def test_break_of_zero_writes_the_raw_span(self):
+    def test_fills_with_the_clocked_hours(self):
         rows = [HEADER, ["2026-08-14", "Ivan", "6:00 PM", "11:00 PM", ""]]
-        updates, _ = build_plan(rows, break_hours=0, rounding="none")
+        updates, _ = build_plan(rows)
         assert updates[0].proposed == 5.0
 
 
@@ -170,11 +172,6 @@ class TestCli:
         rc = hours_writer.main([])
         assert rc == hours_writer.EXIT_BAD_INPUT
         assert "no sheet id" in capsys.readouterr().err
-
-    def test_negative_break_is_bad_input(self, capsys):
-        rc = hours_writer.main(["--time-log-sheet-id", "abc", "--break-hours", "-1"])
-        assert rc == hours_writer.EXIT_BAD_INPUT
-        assert "cannot be negative" in capsys.readouterr().err
 
     def test_dry_run_is_the_default(self, monkeypatch, capsys):
         """No --apply means read, report, and touch nothing."""
@@ -223,7 +220,7 @@ class TestCli:
 
         rc = hours_writer.main(["--time-log-sheet-id", "abc", "--apply"])
         assert rc == hours_writer.EXIT_OK
-        assert calls == [[("E2", 4.0)]]
+        assert calls == [[("E2", 5.0)]]
         assert "Wrote 1 cell" in capsys.readouterr().out
 
     def test_refuses_to_exceed_max_writes(self, monkeypatch, capsys):
