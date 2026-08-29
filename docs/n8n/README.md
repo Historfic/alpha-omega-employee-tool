@@ -65,15 +65,44 @@ shift now totals the same way, so no path can leave hours unrecorded.
 
 ## Known limits
 
-- **Employees are hardcoded.** `Decide` carries a literal
-  `{ '001': 'Ivan', '002': 'Daniel' }`. An unmapped id does not fail — it
-  writes `Unknown (003)` into the payroll sheet. Adding staff means editing
-  the workflow until this reads from the employee sheet instead.
 - **No authentication.** The webhook takes `employee_id` and `action` from the
   query string, so anyone holding the URL can record a scan for anyone. This
   is why the webhook path is redacted below.
 - **Whole-sheet read per scan.** `Read All Rows` pulls the entire log on every
   scan. Fine at this size; it will drag as the log grows.
+
+## Managing the roster
+
+There is no admin screen. The roster is the **`Employees` tab** of the same
+spreadsheet, and the workflow reads it on every scan:
+
+```
+      A            B       C                   D     E
+1     employee_id  name    daily_target_hours  pin   active
+2     001          Ivan    5                         TRUE
+3     002          Daniel  5                         FALSE
+```
+
+| To | Do |
+|---|---|
+| Add someone | Append a row. The next scan picks it up — no deploy |
+| Remove someone | Set `active` to `FALSE` |
+
+**Deactivate leavers, never delete them.** `Time_Log` joins to the roster by
+**name**, so removing a row orphans every shift ever filed under it. `FALSE`
+takes someone off the clock while their history stays readable.
+
+**A blank `active` cell means active.** Only an explicit `false`, `no`, `n`,
+`0`, `inactive` or `left` deactivates. Reading a missing column as "not
+active" would take the whole team off the clock at once.
+
+An id that is absent or deactivated is refused outright — the scan returns
+"not on the roster" and writes nothing. That matters: it used to write
+`Unknown (003)` into the payroll sheet, which looks like a real shift and
+gets paid.
+
+The `pin` column is unused here and kept blank. It exists so the layout
+matches the El Bethel sibling project, whose kiosk needs one.
 
 ## What is redacted
 
