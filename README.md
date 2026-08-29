@@ -90,7 +90,7 @@ Two entry points — pick whichever you prefer. They accept the same flags.
 # Top-level dispatcher
 python main.py qr [--csv PATH] [-o OUT] [-v]
 python main.py report [--time-log PATH] [--employees PATH] [-o OUT] [-v]
-python main.py fill-hours [--break-hours N] [--rounding MODE] [--apply] [-v]
+python main.py fill-hours [--overwrite] [--max-writes N] [--apply] [-v]
 
 # Or run each module directly
 python -m src.qr_generator --help
