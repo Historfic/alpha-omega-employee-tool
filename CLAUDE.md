@@ -38,10 +38,11 @@ source of truth. The same goes for `A&O Roster`, which the dashboard's
 Employees page posts to and which writes the `Employees` tab — its shared
 secret is `ROSTER_TOKEN` in `.env`, and `N8N_ROSTER_WORKFLOW_ID` names it.
 
-The clock opens by per-person QR (`?employee_id=`) or by PIN (`?pin=`, column D
-of `Employees`). PINs may start with 0: they are written as text, and every
-reader pads a short value back to four digits because Sheets keeps a typed
-0482 as 482.
+Everybody clocks in by PIN (`?pin=`, column D of `Employees`); a QR code only
+opens the clock. The per-person cards `qr` prints still lead there, but the
+`employee_id` they carry is ignored and the clock asks for a PIN. PINs may
+start with 0: they are written as text, and every reader pads a short value
+back to four digits because Sheets keeps a typed 0482 as 482.
 
 ### The sheet
 

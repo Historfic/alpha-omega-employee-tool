@@ -65,19 +65,24 @@ shift now totals the same way, so no path can leave hours unrecorded.
 
 ## Clocking in with a PIN
 
-The same webhook also opens with a PIN, so one shared code can serve everyone
-and a new hire can clock in without a printed card. That shared QR is on the
-dashboard's Employees page, with a printable sheet at `/employees/qr` — both
-behind the page's password, since the code is the bare webhook link:
+Everybody identifies with their PIN; a QR code only opens the clock. One
+shared code serves everyone — it is on the dashboard's Employees page, with a
+printable sheet at `/employees/qr`, both behind the page's password since the
+code is the bare webhook link:
 
 | Request | What happens |
 |---|---|
-| no `employee_id`, no `pin` | `Decide` returns `ask_pin` → **Respond Ask PIN**, a form that resubmits as `?pin=NNNN` |
+| no `pin` | `Decide` returns `ask_pin` → **Respond Ask PIN**, a form that resubmits as `?pin=NNNN` |
 | `?pin=NNNN` | the person whose `Employees` column D holds that PIN, then the usual choose page |
-| `?employee_id=001` | unchanged — the per-person QR codes already printed keep working |
+| `?employee_id=001` (an old per-person card) | **ignored** — asks for a PIN like the shared code |
 
-The confirm taps carry whatever opened the page (`display_ident`), so a PIN
-scan stays a PIN scan. A PIN shared by two people opens **neither** account,
+The per-person cards used to pick the person by their `employee_id`, which
+meant a card left on a desk, or a photo of one, clocked its owner in or out for
+whoever scanned it. They still work as a way in; the id they carry no longer
+decides anything.
+
+The confirm taps carry the PIN (`display_ident`), so the person is resolved
+again on the tap. A PIN shared by two people opens **neither** account,
 and a wrong PIN, a leaver's PIN and a shared PIN all get the same "That PIN
 did not match" answer, so the page tells a guesser nothing.
 
@@ -87,10 +92,9 @@ to four digits. A blank cell never matches.
 
 ## Known limits
 
-- **The id path has no authentication.** The webhook takes `employee_id` and
-  `action` from the query string, so anyone holding the URL can record a scan
-  for anyone. This is why the webhook path is redacted below. A PIN scan puts
-  the PIN in the URL too — it lands in the phone's history and in n8n's
+- **Four-digit PINs, no lockout.** Nothing slows down somebody trying PINs
+  against the webhook, which is one reason its path is redacted below. The PIN
+  also travels in the URL, so it lands in the phone's history and in n8n's
   execution log.
 - **Whole-sheet read per scan.** `Read All Rows` pulls the entire log on every
   scan. Fine at this size; it will drag as the log grows.
@@ -123,8 +127,8 @@ and writes. Redacted copy: `roster.workflow.json`.
 | Rename someone | Edit the name. Every `Sheet1` row and their `Sheet2` pivot headers move with it, in one batched write — the clock matches names exactly, so leaving them would strand an open shift |
 
 **Ids are never reused.** A new person gets one past the highest id ever
-issued, because the printed QR codes carry the id: a recycled number would
-clock the new person in whenever the old card was scanned.
+issued. The clock no longer goes by id, but an id still names one person on
+old cards, in notes and in history.
 
 ## The `Sheet2` pivot
 
