@@ -1,0 +1,513 @@
+{
+  "name": "A&O Roster",
+  "nodes": [
+    {
+      "id": "r-hook",
+      "name": "Roster Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -620,
+        200
+      ],
+      "webhookId": "YOUR_WEBHOOK_ID",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ao-roster",
+        "responseMode": "responseNode"
+      }
+    },
+    {
+      "id": "r-auth",
+      "name": "Authorise",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -400,
+        200
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "version": 2,
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "token",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              },
+              "leftValue": "={{ $json.headers['x-roster-token'] }}",
+              "rightValue": "YOUR_ROSTER_TOKEN"
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "r-read",
+      "name": "Read Roster",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -180,
+        100
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "YOUR_CREDENTIAL_NAME"
+        }
+      },
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "options": {},
+        "method": "GET",
+        "url": "https://sheets.googleapis.com/v4/spreadsheets/YOUR_SPREADSHEET_ID/values/Employees!A%3AE"
+      }
+    },
+    {
+      "id": "r-log",
+      "name": "Read Time Log",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        40,
+        100
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "YOUR_CREDENTIAL_NAME"
+        }
+      },
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "options": {},
+        "method": "GET",
+        "url": "https://sheets.googleapis.com/v4/spreadsheets/YOUR_SPREADSHEET_ID/values/Sheet1!A%3AE"
+      }
+    },
+    {
+      "id": "r-pivot",
+      "name": "Read Pivot Header",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        150,
+        240
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "YOUR_CREDENTIAL_NAME"
+        }
+      },
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "options": {},
+        "method": "GET",
+        "url": "https://sheets.googleapis.com/v4/spreadsheets/YOUR_SPREADSHEET_ID/values/Sheet2!1%3A2"
+      }
+    },
+    {
+      "id": "r-plan",
+      "name": "Plan",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        260,
+        100
+      ],
+      "parameters": {
+        "jsCode": "// Decides what to write, having read the roster as it stands.\n//\n// The dashboard has already checked the shape of the request -- a name that is\n// not blank, a four-digit PIN. What it cannot check is the sheet at the moment\n// of writing: whether the PIN is now somebody else's, whether another admin\n// took that id a second ago. Those checks live here, where the rows are in hand.\nconst body = $('Roster Webhook').first().json.body || {};\nconst rows = $('Read Roster').first().json.values || [];\n\n// Row 1 is the header. Index 0 of this array is therefore sheet row 2.\nconst data = rows.slice(1);\n\nconst base = 'https://sheets.googleapis.com/v4/spreadsheets/YOUR_SPREADSHEET_ID/values/';\nconst range = (r) => encodeURIComponent('Employees!' + r);\n\nconst norm = (v) => String(v == null ? '' : v).trim().toLowerCase();\n\n// Ids are compared as numbers: the clock pads them ('3' and '003' are the same\n// person), and a cell Sheets has turned into the number 3 must still match.\nconst idNum = (v) => {\n  const m = /^0*(\\d+)$/.exec(String(v == null ? '' : v).trim());\n  return m ? Number(m[1]) : null;\n};\nconst sameId = (a, b) => idNum(a) !== null && idNum(a) === idNum(b);\n\n// Only an explicit denial deactivates. Blank counts as active, the same way\n// the clock and the dashboard read the column.\nconst inactive = (cell) =>\n  ['false', 'no', 'n', '0', 'inactive', 'left'].includes(norm(cell));\n\n// Four digits, and a leading zero is fine: PINs are written as text ('0482),\n// and one typed into the sheet by hand, which Sheets keeps as the number 482,\n// is read back padded. The clock reads the column the same way.\nconst pinOk = (p) => /^\\d{4}$/.test(p);\nconst storedPin = (v) => {\n  const s = String(v == null ? '' : v).trim();\n  return /^\\d{1,4}$/.test(s) ? s.padStart(4, '0') : s;\n};\n\nconst reject = (message) => [{ json: { op: 'reject', message } }];\n\nconst action = String(body.action || '').trim();\n\nif (action === 'add') {\n  // Written the way the clock pads it, so the sheet never holds '3' beside '003'.\n  const id = idNum(body.id) === null ? '' : String(idNum(body.id)).padStart(3, '0');\n  const name = String(body.name || '').trim();\n  const pin = String(body.pin || '').trim();\n\n  if (!id || !name || !pin) {\n    return reject('The request was incomplete — nothing was written.');\n  }\n  if (!pinOk(pin)) {\n    return reject('A PIN is exactly four digits.');\n  }\n\n  let highest = 0;\n  for (const row of data) {\n    const n = idNum(row[0]);\n    if (n !== null && n > highest) highest = n;\n    if (!String(row[0] || '').trim() && !String(row[1] || '').trim()) continue;\n\n    if (norm(row[1]) === norm(name)) {\n      return reject(String(row[1]).trim() + ' is already on the roster.');\n    }\n    if (storedPin(row[3]) === pin) {\n      return reject('That PIN already belongs to someone else. Choose another.');\n    }\n  }\n\n  // Never reuse a number, even one freed by a deleted row: the QR codes\n  // already printed carry the id, so a recycled one would clock the new person\n  // in whenever the old card was scanned.\n  if (idNum(id) <= highest) {\n    return reject(\n      id + ' is already taken — somebody was added a moment ago. Reload and try again.',\n    );\n  }\n\n  return [{ json: {\n    op: 'add',\n    url: base + range('A:E') + ':append',\n    // The apostrophe keeps '003' as text; Sheets would otherwise store 3.\n    // 5 is the A&O daily target, written so the row reads like every other.\n    values: [[\"'\" + id, name, '5', \"'\" + pin, 'TRUE']],\n    message: name + ' was added as ' + id + '. They can clock in with their PIN now.',\n  } }];\n}\n\nif (action === 'edit') {\n  const id = String(body.id || '').trim();\n  const name = String(body.name || '').trim();\n  const rawPin = body.pin === undefined || body.pin === null ? '' : String(body.pin).trim();\n\n  let found = -1;\n  for (let i = 0; i < data.length; i += 1) {\n    if (sameId(data[i][0], id)) { found = i; break; }\n  }\n  if (found === -1) return reject(id + ' is not on the roster.');\n\n  // Re-sending the PIN somebody already has is not a change. The dashboard\n  // never sees PINs, so it cannot tell; the sheet can.\n  const pin = rawPin === '' || rawPin === storedPin(data[found][3]) ? null : rawPin;\n\n  if (!name) return reject('The request was incomplete — nothing was written.');\n  if (pin !== null && !pinOk(pin)) {\n    return reject('A PIN is exactly four digits.');\n  }\n\n  // Uniqueness against every OTHER row. Keeping your own name or PIN while\n  // changing the other must not be refused as a duplicate of yourself.\n  for (let i = 0; i < data.length; i += 1) {\n    if (i === found) continue;\n    const other = data[i];\n    if (!String(other[0] || '').trim() && !String(other[1] || '').trim()) continue;\n    if (norm(other[1]) === norm(name)) {\n      return reject(String(other[1]).trim() + ' already has that name.');\n    }\n    if (pin !== null && String(other[3] || '').trim() === pin) {\n      return reject('That PIN already belongs to someone else. Choose another.');\n    }\n  }\n\n  const row = data[found];\n  // The name to search the log for comes from the sheet, never from the\n  // request. These are payroll rows; what selects them has to come from the\n  // same read that found the person.\n  const oldName = String(row[1] || '').trim();\n  const sheetRow = found + 2;\n\n  const updates = [{ range: 'Employees!B' + sheetRow, values: [[name]] }];\n  if (pin !== null) {\n    updates.push({ range: 'Employees!D' + sheetRow, values: [[\"'\" + pin]] });\n  }\n\n  // A rename has to carry the history with it. Sheet1 records the employee's\n  // name, so leaving those rows behind would orphan every shift the person\n  // worked. Exact comparison, because the clock matches open shifts exactly:\n  // even a change of capitalisation would otherwise strand tonight's row.\n  let moved = 0;\n  const renamed = oldName !== name;\n  if (renamed && oldName) {\n    const log = $('Read Time Log').first().json.values || [];\n    for (let i = 1; i < log.length; i += 1) {\n      const entry = log[i] || [];\n      if (norm(entry[1]) === norm(oldName)) {\n        updates.push({ range: 'Sheet1!B' + (i + 1), values: [[name]] });\n        moved += 1;\n      }\n    }\n\n    // The clock finds a person's pivot columns by the name in Sheet2's\n    // headers, so leaving those behind would start the renamed person a\n    // second, empty block and strand their history under the old name.\n    const colLetter = (i) => {\n      let s = '';\n      for (let n = i + 1; n > 0; n = Math.floor((n - 1) / 26)) {\n        s = String.fromCharCode(65 + ((n - 1) % 26)) + s;\n      }\n      return s;\n    };\n    const pivot = $('Read Pivot Header').first().json.values || [];\n    const nameRow = pivot[0] || [];\n    const labelRow = pivot[1] || [];\n    for (let c = 1; c < nameRow.length; c += 1) {\n      if (norm(nameRow[c]) === norm(oldName)) {\n        updates.push({ range: 'Sheet2!' + colLetter(c) + '1', values: [[name]] });\n      }\n    }\n    for (let c = 1; c < labelRow.length; c += 1) {\n      if (norm(labelRow[c]) === 'total hours of ' + norm(oldName)) {\n        updates.push({ range: 'Sheet2!' + colLetter(c) + '2', values: [['Total Hours of ' + name]] });\n      }\n    }\n  }\n\n  if (!renamed && pin === null) {\n    return reject('Nothing about ' + oldName + ' has changed.');\n  }\n\n  let message;\n  if (renamed) {\n    message = oldName + ' is now ' + name + '.'\n      + (moved > 0\n          ? ' ' + moved + ' shift' + (moved === 1 ? '' : 's') + ' moved with them.'\n          : ' No shifts were on record under the old name.');\n  } else {\n    message = name + ' was updated.';\n  }\n  if (pin !== null) message += ' Their PIN was changed.';\n\n  return [{ json: { op: 'edit', body: { valueInputOption: 'USER_ENTERED', data: updates }, message } }];\n}\n\nif (action === 'setActive') {\n  const id = String(body.id || '').trim();\n  const active = body.active === true;\n\n  let found = -1;\n  for (let i = 0; i < data.length; i += 1) {\n    if (sameId(data[i][0], id)) { found = i; break; }\n  }\n  if (found === -1) return reject(id + ' is not on the roster.');\n\n  const row = data[found];\n  const who = String(row[1] || id).trim();\n\n  if (!inactive(row[4]) === active) {\n    return reject(who + ' is already ' + (active ? 'active' : 'deactivated') + '.');\n  }\n\n  // +2, not +1: index 0 is sheet row 2, because row 1 is the header.\n  const cell = 'E' + (found + 2);\n\n  return [{ json: {\n    op: 'set',\n    url: base + range(cell),\n    values: [[active ? 'TRUE' : 'FALSE']],\n    message: active\n      ? who + ' is on the roster again.'\n      : who + ' was deactivated. Their shifts are untouched.',\n  } }];\n}\n\nreturn reject('Unknown action \"' + action + '\".');"
+      }
+    },
+    {
+      "id": "r-route",
+      "name": "Route",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        480,
+        100
+      ],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "version": 2,
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "leftValue": "={{ $json.op }}",
+                    "rightValue": "add"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "add"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "version": 2,
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "leftValue": "={{ $json.op }}",
+                    "rightValue": "set"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "set"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "version": 2,
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "leftValue": "={{ $json.op }}",
+                    "rightValue": "edit"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "edit"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "reject"
+        }
+      }
+    },
+    {
+      "id": "r-append",
+      "name": "Add Row",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        720,
+        -40
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "YOUR_CREDENTIAL_NAME"
+        }
+      },
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "options": {},
+        "method": "POST",
+        "url": "={{ $json.url }}",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "valueInputOption",
+              "value": "USER_ENTERED"
+            },
+            {
+              "name": "insertDataOption",
+              "value": "INSERT_ROWS"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ values: $json.values }) }}"
+      }
+    },
+    {
+      "id": "r-set",
+      "name": "Set Active",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        720,
+        100
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "YOUR_CREDENTIAL_NAME"
+        }
+      },
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "options": {},
+        "method": "PUT",
+        "url": "={{ $json.url }}",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "valueInputOption",
+              "value": "USER_ENTERED"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ values: $json.values }) }}"
+      }
+    },
+    {
+      "id": "r-edit",
+      "name": "Apply Edit",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        720,
+        240
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "YOUR_CREDENTIAL_NAME"
+        }
+      },
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "options": {},
+        "method": "POST",
+        "url": "https://sheets.googleapis.com/v4/spreadsheets/YOUR_SPREADSHEET_ID/values:batchUpdate",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}"
+      }
+    },
+    {
+      "id": "r-respond-ok",
+      "name": "Respond Saved",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        960,
+        100
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: true, message: $('Plan').first().json.message }) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "r-respond-no",
+      "name": "Respond Refused",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        720,
+        380
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: false, error: $('Plan').first().json.message }) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "r-respond-denied",
+      "name": "Respond Denied",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        -180,
+        320
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: false, error: \"The roster service refused this request.\" }) }}",
+        "options": {
+          "responseCode": 401
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Roster Webhook": {
+      "main": [
+        [
+          {
+            "node": "Authorise",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Authorise": {
+      "main": [
+        [
+          {
+            "node": "Read Roster",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Denied",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Roster": {
+      "main": [
+        [
+          {
+            "node": "Read Time Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Time Log": {
+      "main": [
+        [
+          {
+            "node": "Read Pivot Header",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Pivot Header": {
+      "main": [
+        [
+          {
+            "node": "Plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Plan": {
+      "main": [
+        [
+          {
+            "node": "Route",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route": {
+      "main": [
+        [
+          {
+            "node": "Add Row",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Set Active",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Apply Edit",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Refused",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add Row": {
+      "main": [
+        [
+          {
+            "node": "Respond Saved",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Active": {
+      "main": [
+        [
+          {
+            "node": "Respond Saved",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apply Edit": {
+      "main": [
+        [
+          {
+            "node": "Respond Saved",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  }
+}

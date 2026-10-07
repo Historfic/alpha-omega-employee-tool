@@ -34,7 +34,14 @@ and authenticates read-only — most of the shared rules are documented in its
 The clock workflow itself is **not in any repo**. It is an n8n workflow named
 `A&O Clock Log`, edited live through the n8n public API. A redacted export and
 its documentation are in `docs/n8n/`; that copy is for reading, n8n is the
-source of truth.
+source of truth. The same goes for `A&O Roster`, which the dashboard's
+Employees page posts to and which writes the `Employees` tab — its shared
+secret is `ROSTER_TOKEN` in `.env`, and `N8N_ROSTER_WORKFLOW_ID` names it.
+
+The clock opens by per-person QR (`?employee_id=`) or by PIN (`?pin=`, column D
+of `Employees`). PINs may start with 0: they are written as text, and every
+reader pads a short value back to four digits because Sheets keeps a typed
+0482 as 482.
 
 ### The sheet
 

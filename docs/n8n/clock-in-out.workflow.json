@@ -1,5 +1,5 @@
 {
-  "name": "clock-in-out",
+  "name": "A&O Clock Log",
   "nodes": [
     {
       "id": "1d7841af-0b44-42ec-9270-54249bf736f9",
@@ -41,6 +41,18 @@
               "name": "action",
               "id": "dbd3a43d-3537-4491-bf95-f71cf6f5892a",
               "value": "={{ $json.query.action }}"
+            },
+            {
+              "type": "string",
+              "name": "confirm",
+              "id": "confirm-field",
+              "value": "={{ $json.query.confirm }}"
+            },
+            {
+              "id": "pin-field",
+              "name": "pin",
+              "type": "string",
+              "value": "={{ $json.query.pin }}"
             }
           ]
         }
@@ -67,22 +79,21 @@
           "conditions": [
             {
               "operator": {
-                "operation": "notEmpty",
-                "singleValue": true,
-                "type": "string"
-              },
-              "rightValue": "",
-              "id": "11111111-1111-1111-1111-111111111111",
-              "leftValue": "={{ $json.employee_id }}"
-            },
-            {
-              "operator": {
                 "operation": "regex",
                 "type": "string"
               },
-              "rightValue": "^(in|out)$",
+              "rightValue": "^(in|out)?$",
               "id": "22222222-2222-2222-2222-222222222222",
-              "leftValue": "={{ $json.action }}"
+              "leftValue": "={{ $json.action || '' }}"
+            },
+            {
+              "id": "crawler-guard",
+              "operator": {
+                "operation": "notRegex",
+                "type": "string"
+              },
+              "leftValue": "={{ $('Webhook').item.json.headers['x-forwarded-for'] || '' }}",
+              "rightValue": "^(66.249.|64.233.|72.14.|209.85.|66.102.)"
             }
           ],
           "combinator": "and"
@@ -123,7 +134,8 @@
       "position": [
         720,
         0
-      ]
+      ],
+      "executeOnce": true
     },
     {
       "id": "24b04ad5-6562-40d3-8ff8-caf7853746d6",
@@ -134,7 +146,7 @@
         0
       ],
       "parameters": {
-        "jsCode": "const ef = $('Edit Fields').first().json;\nconst empId = String(ef.employee_id).padStart(3, '0');\nconst action = String(ef.action).toLowerCase();\nconst allRows = $input.all().map(i => i.json);\n\nconst employeeMap = { '001': 'Ivan', '002': 'Daniel' };\nconst employeeName = employeeMap[empId] || ('Unknown (' + empId + ')');\n\nconst now = DateTime.now().setZone('Asia/Manila');\nconst dateStr = now.toFormat('MM/dd/yyyy');\nconst timeStr = now.toFormat('h:mm a');\n\nfunction formatDuration(totalHours) {\n  if (totalHours < 1) {\n    const minutes = Math.max(0, Math.round(totalHours * 60));\n    return minutes + (minutes === 1 ? ' minute' : ' minutes');\n  }\n  return totalHours.toFixed(2) + ' hours';\n}\n\nfunction findOpenRows() {\n  return allRows.filter(r =>\n    r && r.Employee === employeeName &&\n    r.Time_in && String(r.Time_in).trim() !== '' &&\n    (!r.Time_out || r.Time_out === '' || r.Time_out === null)\n  );\n}\n\n// Evening / night-themed verse pool (modern English, public-domain references)\nconst VERSES = {\n  in_early: [\n    { text: 'Whatever your hand finds to do, do it with all your strength.', ref: 'Ecclesiastes 9:10', meaning: 'You arrived early. Use the time well.' },\n    { text: 'Trust in the Lord with all your heart, and do not rely on your own understanding.', ref: 'Proverbs 3:5', meaning: 'Settle in with trust before the night begins.' },\n    { text: 'I lift up my eyes to the hills, where does my help come from?', ref: 'Psalm 121:1', meaning: 'Strength for tonight comes from above.' },\n    { text: 'Commit your work to the Lord, and your plans will succeed.', ref: 'Proverbs 16:3', meaning: 'Offer your evening shift to God and your plans will hold.' }\n  ],\n  in_ontime: [\n    { text: 'There is a time for everything, and a season for every activity under the heavens.', ref: 'Ecclesiastes 3:1', meaning: 'Right on time. Work has its hour, and this is yours.' },\n    { text: 'When you lie down you will not be afraid; your sleep will be sweet.', ref: 'Proverbs 3:24', meaning: 'A faithful start now means peaceful sleep later.' },\n    { text: 'The end of a thing is better than its beginning.', ref: 'Ecclesiastes 7:8', meaning: 'You have started well; the finish will be even better.' },\n    { text: 'Praise the Lord, all you servants of the Lord who minister by night.', ref: 'Psalm 134:1', meaning: 'Working through the evening is an honored service.' }\n  ],\n  in_late: [\n    { text: 'Go to the ant, you who are lazy. Watch how she works, and learn from her.', ref: 'Proverbs 6:6', meaning: 'Even small creatures show up on time. Let tomorrow look different.' },\n    { text: 'Do you see someone skilled in their work? They will serve before kings.', ref: 'Proverbs 22:29', meaning: 'Diligence opens doors. Tomorrow is a chance to begin again.' },\n    { text: 'Make the most of every opportunity, because the days are evil.', ref: 'Ephesians 5:16', meaning: 'Time matters. Use it well, starting now.' },\n    { text: 'The lazy one does not plow in season, so at harvest time there is nothing.', ref: 'Proverbs 20:4', meaning: 'Putting things off has a cost later. Show up on time tomorrow.' }\n  ],\n  out_early: [\n    { text: 'Whatever you do, work at it with all your heart, as working for the Lord.', ref: 'Colossians 3:23', meaning: \"Make sure tonight's work was given your full heart.\" },\n    { text: 'The Lord will watch over your coming and going both now and forevermore.', ref: 'Psalm 121:8', meaning: 'Go safely. God watches your steps as you leave.' },\n    { text: 'Stand firm. Let nothing move you. Always give yourself fully to good work.', ref: '1 Corinthians 15:58', meaning: 'Steady, faithful effort is never wasted.' },\n    { text: 'Let your light shine before others, so they may see your good works.', ref: 'Matthew 5:16', meaning: 'Your effort speaks. Let it shine in everything you do.' }\n  ],\n  out_ontime: [\n    { text: 'In peace I will lie down and sleep, for you alone, Lord, make me dwell in safety.', ref: 'Psalm 4:8', meaning: 'Shift complete. Rest well tonight.' },\n    { text: 'I have fought the good fight, I have finished the race, I have kept the faith.', ref: '2 Timothy 4:7', meaning: 'You finished what you set out to do. Well done.' },\n    { text: 'Come to me, all who are weary and burdened, and I will give you rest.', ref: 'Matthew 11:28', meaning: \"Your shift is over. Take the rest you've earned.\" },\n    { text: 'The worker deserves their wages.', ref: 'Luke 10:7', meaning: 'Honest work is worth honest pay. You earned this.' }\n  ],\n  out_late: [\n    { text: 'He gives strength to the weary and increases the power of the weak.', ref: 'Isaiah 40:29', meaning: 'Long night. Strength to keep going comes from God.' },\n    { text: 'Let us not grow tired of doing good, in time we will reap a harvest if we do not give up.', ref: 'Galatians 6:9', meaning: 'Extra effort tonight bears fruit tomorrow.' },\n    { text: 'I have learned to be content in any situation.', ref: 'Philippians 4:11', meaning: 'Long shifts and short, both belong to God. Be at peace.' },\n    { text: 'He gives sleep to those he loves.', ref: 'Psalm 127:2', meaning: 'Rest is coming. Hold on a little longer.' },\n    { text: 'Even at night my heart instructs me.', ref: 'Psalm 16:7', meaning: 'Late nights teach what daylight cannot.' }\n  ]\n};\n\nfunction pickVerse(pool) {\n  return pool[Math.floor(Math.random() * pool.length)];\n}\n\nfunction fmtMins(mins) {\n  const total = Math.abs(mins);\n  if (total < 60) return total + ' MIN';\n  const hr = Math.floor(total / 60);\n  const rest = total % 60;\n  if (rest === 0) return hr + (hr === 1 ? ' HR' : ' HRS');\n  return hr + (hr === 1 ? ' HR ' : ' HRS ') + rest + ' MIN';\n}\n\n// PM-shift IN bucketing. Every clock-in lands in one of these — a scan\n// outside the usual window is just early or very late, never a separate\n// category, so its hours are always recorded like any other shift.\nfunction classifyIn(dt) {\n  const h = dt.hour, m = dt.minute;\n  if (h === 18 && m <= 5) return 'in_ontime';            // 6:00–6:05 PM\n  if (h === 18 && m >= 6) return 'in_late';              // 6:06–6:59 PM\n  if (h === 19 && m === 0) return 'in_late';             // 7:00 PM (inclusive)\n  if (h >= 19 && h <= 23) return 'in_brutally_late';     // 7:01–11:59 PM\n  return 'in_early';                                      // midnight–5:59 PM\n}\n\n// OUT bucketing. Post-midnight (h < 12) = overtime; 10:30–11:59 PM = on time; else = early.\nfunction classifyOut(dt) {\n  const h = dt.hour, m = dt.minute;\n  if ((h === 22 && m >= 30) || h === 23) return 'out_ontime';\n  if (h >= 0 && h < 12) return 'out_overtime';\n  return 'out_early';\n}\n\nfunction buildInStatus(shiftType, dt) {\n  const tm = dt.hour * 60 + dt.minute;\n  if (shiftType === 'in_early') {\n    return { label: 'EARLY (' + fmtMins(18*60 - tm) + ' BEFORE)', cls: 'status-good' };\n  }\n  if (shiftType === 'in_ontime') return { label: 'ON TIME', cls: 'status-good' };\n  if (shiftType === 'in_late') {\n    return { label: fmtMins(tm - 18*60) + ' LATE', cls: 'status-bad' };\n  }\n  return { label: 'BRUTALLY LATE (' + fmtMins(tm - 18*60) + ' PAST SHIFT)', cls: 'status-bad' };\n}\n\nfunction buildOutStatus(outShiftCategory, dt) {\n  const ob = classifyOut(dt);\n  const tm = dt.hour * 60 + dt.minute;\n  if (ob === 'out_early') {\n    const diff = (22*60 + 30) - tm;\n    return { label: 'EARLY OUT (' + fmtMins(diff) + ' BEFORE)', cls: 'status-info' };\n  }\n  if (ob === 'out_ontime') return { label: 'ON TIME', cls: 'status-good' };\n  // overtime — minutes past 11:00 PM. Post-midnight = 60 + tm; else = tm - 23*60.\n  let diff;\n  if (dt.hour < 12) diff = 60 + tm;\n  else diff = tm - 23*60;\n  return { label: 'OVERTIME (+' + fmtMins(diff) + ')', cls: 'status-warn' };\n}\n\nfunction inBadge(shiftType) {\n  if (shiftType === 'in_brutally_late') return { label: 'Brutally Late In', cls: 'badge-err' };\n  return { label: 'Clock In', cls: 'badge-in' };\n}\n\nfunction outBadge(outShiftCategory) {\n  if (outShiftCategory === 'brutally_late') return { label: 'Brutally Late Out', cls: 'badge-err' };\n  return { label: 'Clock Out', cls: 'badge-out' };\n}\n\nfunction inSubtitle(shiftType) {\n  if (shiftType === 'in_brutally_late') return 'You are well past shift start. Show up on time tomorrow.';\n  return 'Your scan was recorded.';\n}\n\nfunction outSubtitle(outShiftCategory) {\n  if (outShiftCategory === 'brutally_late') return 'Late in, recorded out. Show up on time tomorrow.';\n  return 'Your scan was recorded.';\n}\n\nfunction roundMin(mins) {\n  // round to nearest hour; round up when within 20 min of the next hour (>=40 min in)\n  const base = Math.floor(mins / 60);\n  return (mins % 60) >= 40 ? base + 1 : base;\n}\nfunction computeTotalHours(inDt, outDt) {\n  const workedMin = Math.max(0, Math.round(outDt.diff(inDt, 'minutes').minutes));\n  // overtime = clocked out more than 1 hour after the 11 PM target, i.e. strictly after midnight\n  const postMidnight = outDt.hour < 12;\n  const overtime = postMidnight && (outDt.hour * 60 + outDt.minute) > 0;\n  if (overtime) return roundMin(workedMin);   // overtime: actual rounded hours (only case above 5)\n  if (workedMin >= 270) return 5;             // >= 4h30m completes the fixed 5-hour shift\n  return Math.min(5, roundMin(workedMin));    // short shift: rounded actual, capped at 5\n}\nfunction hoursLabel(h) {\n  return h + (h === 1 ? ' hour' : ' hours');\n}\n\nfunction parseInDt(dateStr, timeStr) {\n  const formats = ['yyyy-MM-dd h:mm:ss a', 'MM/dd/yyyy h:mm:ss a', 'M/d/yyyy h:mm:ss a', 'yyyy-MM-dd h:mm a', 'MM/dd/yyyy h:mm a', 'M/d/yyyy h:mm a', 'yyyy-MM-dd HH:mm:ss', 'MM/dd/yyyy HH:mm:ss', 'yyyy-MM-dd HH:mm', 'MM/dd/yyyy HH:mm'];\n  for (const fmt of formats) {\n    const dt = DateTime.fromFormat(String(dateStr) + ' ' + String(timeStr), fmt, { zone: 'Asia/Manila' });\n    if (dt.isValid) return dt;\n  }\n  return null;\n}\n\nif (action === 'in') {\n  const openRows = findOpenRows();\n  if (openRows.length > 0) {\n    const openRow = openRows[openRows.length - 1];\n    return [{ json: {\n      operation: 'no_clock_out',\n      display_employee: employeeName,\n      display_date: openRow.Date,\n      display_time_in: openRow.Time_in\n    } }];\n  }\n  const shiftType = classifyIn(now);\n  let pool;\n  if (shiftType === 'in_early') pool = VERSES.in_early;\n  else if (shiftType === 'in_ontime') pool = VERSES.in_ontime;\n  else pool = VERSES.in_late;\n  const v = pickVerse(pool);\n  const s = buildInStatus(shiftType, now);\n  const b = inBadge(shiftType);\n  return [{ json: {\n    operation: 'append',\n    Date: dateStr,\n    Employee: employeeName,\n    Time_in: timeStr,\n    Time_out: '',\n    Total_hours: '',\n    display_employee: employeeName,\n    display_time: timeStr,\n    display_badge_label: b.label,\n    display_badge_class: b.cls,\n    display_subtitle: inSubtitle(shiftType),\n    display_status_label: s.label,\n    display_status_class: s.cls,\n    display_verse_text: v.text,\n    display_verse_ref: v.ref,\n    display_verse_meaning: v.meaning,\n    display_shift_type: shiftType\n  } }];\n}\n\nif (action === 'out') {\n  const open = findOpenRows();\n  if (open.length === 0) {\n    return [{ json: { operation: 'no_clock_in', display_employee: employeeName } }];\n  }\n  const row = open[open.length - 1];\n  const inDt = parseInDt(row.Date, row.Time_in);\n  if (!inDt) {\n    return [{ json: { operation: 'no_clock_in', display_employee: employeeName } }];\n  }\n  const inShift = classifyIn(inDt);\n  const outBucket = classifyOut(now);\n\n  // Every shift is totalled the same way now. There is no separate bucket\n  // that leaves Total_hours blank, so hours can no longer go unrecorded.\n  const outCat = inShift === 'in_brutally_late' ? 'brutally_late' : 'regular';\n  const totalHours = computeTotalHours(inDt, now);\n\n  let pool;\n  if (outCat === 'brutally_late') pool = VERSES.out_late;\n  else if (outBucket === 'out_early') pool = VERSES.out_early;\n  else if (outBucket === 'out_ontime') pool = VERSES.out_ontime;\n  else pool = VERSES.out_late;\n  const v = pickVerse(pool);\n\n  const s = buildOutStatus(outCat, now);\n  const b = outBadge(outCat);\n\n  return [{ json: {\n    operation: 'update',\n    row_number: row.row_number,\n    Date: row.Date,\n    Employee: employeeName,\n    Time_out: timeStr,\n    Total_hours: totalHours,\n    display_employee: employeeName,\n    display_time: timeStr,\n    display_total: hoursLabel(totalHours),\n    display_total_label: 'Total Time',\n    display_badge_label: b.label,\n    display_badge_class: b.cls,\n    display_subtitle: outSubtitle(outCat),\n    display_status_label: s.label,\n    display_status_class: s.cls,\n    display_verse_text: v.text,\n    display_verse_ref: v.ref,\n    display_verse_meaning: v.meaning,\n    display_shift_type: outCat\n  } }];\n}\n\nreturn [{ json: { operation: 'no_clock_in', display_employee: 'Unknown' } }];\n",
+        "jsCode": "const ef = $('Edit Fields').first().json;\nconst rawId = String(ef.employee_id ?? '').trim();\nconst pin = String(ef.pin ?? '').trim();\nconst empId = rawId.padStart(3, '0');\nconst action = String(ef.action || '').toLowerCase();\nconst confirmed = String(ef.confirm || '') === '1';\nconst allRows = $input.all().map(i => i.json);\n\n// One shared code opened with a PIN, alongside the per-person codes already\n// printed. A bare scan of the shared code carries neither, so it asks who you\n// are rather than failing as a broken code.\nif (!rawId && !pin) {\n  return [{ json: { operation: 'ask_pin' } }];\n}\n\n// The roster comes from the Employees tab, not a literal in this file. A\n// hardcoded map meant a leaver kept clocking in and a new hire could not.\n// An id that is absent or deactivated is refused outright — writing\n// 'Unknown (003)' into a payroll sheet looks like a real shift and gets paid.\nconst roster = $('Get Roster').all().map((i) => i.json);\n// A PIN may start with 0. The roster workflow stores PINs as text, but one\n// typed straight into the sheet as 0482 is kept by Sheets as the number 482,\n// so a short stored value is read back padded. A blank cell stays blank and\n// can never match.\nfunction storedPin(v) {\n  const s = String(v ?? '').trim();\n  return /^\\d{1,4}$/.test(s) ? s.padStart(4, '0') : '';\n}\n// A PIN two people share opens neither account: either could otherwise clock\n// the other in or out, and the sheet would file it under one name with no sign\n// anything was wrong.\nfunction findByPin(p) {\n  if (!/^\\d{4}$/.test(p)) return null;\n  const owners = roster.filter((r) => storedPin(r.pin) === p);\n  return owners.length === 1 ? owners[0] : null;\n}\nconst person = pin\n  ? findByPin(pin)\n  : roster.find(\n      (r) => String(r.employee_id || '').trim().padStart(3, '0') === empId\n    );\n\n// A blank 'active' cell means active. Reading a missing column as \"not\n// active\" would take the whole team off the clock; only an explicit no does.\nconst INACTIVE = ['false', 'no', 'n', '0', 'inactive', 'left'];\nconst isActive = person && !INACTIVE.includes(String(person.active ?? '').trim().toLowerCase());\n\nif (!person || !isActive) {\n  return [{ json: {\n    operation: 'unknown_employee',\n    display_employee: pin ? '' : empId,\n    display_via_pin: Boolean(pin)\n  } }];\n}\nconst employeeName = String(person.name || '').trim() || empId;\n\n// The confirm taps resolve the person again from scratch, so they carry\n// whatever opened this page -- a PIN scan stays a PIN scan, and a PIN changed\n// between the two taps is refused rather than quietly honoured by id.\nconst ident = pin ? 'pin=' + pin : 'employee_id=' + empId;\n\nconst now = DateTime.now().setZone('Asia/Manila');\nconst dateStr = now.toFormat('MM/dd/yyyy');\nconst timeStr = now.toFormat('h:mm a');\n\n// What a full shift looks like from here. Shown on the clock-in screen so\n// nobody has to work out their own finish time. Advisory only -- pay is\n// whatever the clock says, so leaving earlier or later still pays honestly.\nconst TARGET_HOURS = 5;\nconst targetOutStr = now.plus({ hours: TARGET_HOURS }).toFormat('h:mm a');\n\nfunction formatDuration(totalHours) {\n  if (totalHours < 1) {\n    const minutes = Math.max(0, Math.round(totalHours * 60));\n    return minutes + (minutes === 1 ? ' minute' : ' minutes');\n  }\n  return totalHours.toFixed(2) + ' hours';\n}\n\n// An open row from a previous day is a forgotten clock-out, not a shift\n// in progress. The two need different answers, and telling them apart\n// needs the row's date rather than just its presence.\nfunction openedToday(rowDate) {\n  const d = parseInDt(rowDate, '12:00 AM');\n  return d ? d.toFormat('MM/dd/yyyy') === dateStr : String(rowDate).trim() === dateStr;\n}\n\nfunction findOpenRows() {\n  return allRows.filter(r =>\n    r && r.Employee === employeeName &&\n    r.Time_in && String(r.Time_in).trim() !== '' &&\n    (!r.Time_out || r.Time_out === '' || r.Time_out === null)\n  );\n}\n\n// Evening / night-themed verse pool (modern English, public-domain references)\nconst VERSES = {\n  in_early: [\n    { text: 'Whatever your hand finds to do, do it with all your strength.', ref: 'Ecclesiastes 9:10', meaning: 'You arrived early. Use the time well.' },\n    { text: 'Trust in the Lord with all your heart, and do not rely on your own understanding.', ref: 'Proverbs 3:5', meaning: 'Settle in with trust before the night begins.' },\n    { text: 'I lift up my eyes to the hills, where does my help come from?', ref: 'Psalm 121:1', meaning: 'Strength for tonight comes from above.' },\n    { text: 'Commit your work to the Lord, and your plans will succeed.', ref: 'Proverbs 16:3', meaning: 'Offer your evening shift to God and your plans will hold.' }\n  ],\n  in_ontime: [\n    { text: 'There is a time for everything, and a season for every activity under the heavens.', ref: 'Ecclesiastes 3:1', meaning: 'Right on time. Work has its hour, and this is yours.' },\n    { text: 'When you lie down you will not be afraid; your sleep will be sweet.', ref: 'Proverbs 3:24', meaning: 'A faithful start now means peaceful sleep later.' },\n    { text: 'The end of a thing is better than its beginning.', ref: 'Ecclesiastes 7:8', meaning: 'You have started well; the finish will be even better.' },\n    { text: 'Praise the Lord, all you servants of the Lord who minister by night.', ref: 'Psalm 134:1', meaning: 'Working through the evening is an honored service.' }\n  ],\n  in_late: [\n    { text: 'Go to the ant, you who are lazy. Watch how she works, and learn from her.', ref: 'Proverbs 6:6', meaning: 'Even small creatures show up on time. Let tomorrow look different.' },\n    { text: 'Do you see someone skilled in their work? They will serve before kings.', ref: 'Proverbs 22:29', meaning: 'Diligence opens doors. Tomorrow is a chance to begin again.' },\n    { text: 'Make the most of every opportunity, because the days are evil.', ref: 'Ephesians 5:16', meaning: 'Time matters. Use it well, starting now.' },\n    { text: 'The lazy one does not plow in season, so at harvest time there is nothing.', ref: 'Proverbs 20:4', meaning: 'Putting things off has a cost later. Show up on time tomorrow.' }\n  ],\n  out_early: [\n    { text: 'Whatever you do, work at it with all your heart, as working for the Lord.', ref: 'Colossians 3:23', meaning: \"Make sure tonight's work was given your full heart.\" },\n    { text: 'The Lord will watch over your coming and going both now and forevermore.', ref: 'Psalm 121:8', meaning: 'Go safely. God watches your steps as you leave.' },\n    { text: 'Stand firm. Let nothing move you. Always give yourself fully to good work.', ref: '1 Corinthians 15:58', meaning: 'Steady, faithful effort is never wasted.' },\n    { text: 'Let your light shine before others, so they may see your good works.', ref: 'Matthew 5:16', meaning: 'Your effort speaks. Let it shine in everything you do.' }\n  ],\n  out_ontime: [\n    { text: 'In peace I will lie down and sleep, for you alone, Lord, make me dwell in safety.', ref: 'Psalm 4:8', meaning: 'Shift complete. Rest well tonight.' },\n    { text: 'I have fought the good fight, I have finished the race, I have kept the faith.', ref: '2 Timothy 4:7', meaning: 'You finished what you set out to do. Well done.' },\n    { text: 'Come to me, all who are weary and burdened, and I will give you rest.', ref: 'Matthew 11:28', meaning: \"Your shift is over. Take the rest you've earned.\" },\n    { text: 'The worker deserves their wages.', ref: 'Luke 10:7', meaning: 'Honest work is worth honest pay. You earned this.' }\n  ],\n  out_late: [\n    { text: 'He gives strength to the weary and increases the power of the weak.', ref: 'Isaiah 40:29', meaning: 'Long night. Strength to keep going comes from God.' },\n    { text: 'Let us not grow tired of doing good, in time we will reap a harvest if we do not give up.', ref: 'Galatians 6:9', meaning: 'Extra effort tonight bears fruit tomorrow.' },\n    { text: 'I have learned to be content in any situation.', ref: 'Philippians 4:11', meaning: 'Long shifts and short, both belong to God. Be at peace.' },\n    { text: 'He gives sleep to those he loves.', ref: 'Psalm 127:2', meaning: 'Rest is coming. Hold on a little longer.' },\n    { text: 'Even at night my heart instructs me.', ref: 'Psalm 16:7', meaning: 'Late nights teach what daylight cannot.' }\n  ]\n};\n\nfunction pickVerse(pool) {\n  return pool[Math.floor(Math.random() * pool.length)];\n}\n\nfunction fmtMins(mins) {\n  const total = Math.abs(mins);\n  if (total < 60) return total + ' MIN';\n  const hr = Math.floor(total / 60);\n  const rest = total % 60;\n  if (rest === 0) return hr + (hr === 1 ? ' HR' : ' HRS');\n  return hr + (hr === 1 ? ' HR ' : ' HRS ') + rest + ' MIN';\n}\n\n// PM-shift IN bucketing. Every clock-in lands in one of these — a scan\n// outside the usual window is just early or very late, never a separate\n// category, so its hours are always recorded like any other shift.\nfunction classifyIn(dt) {\n  const h = dt.hour, m = dt.minute;\n  if (h === 18 && m <= 5) return 'in_ontime';            // 6:00–6:05 PM\n  if (h === 18 && m >= 6) return 'in_late';              // 6:06–6:59 PM\n  if (h === 19 && m === 0) return 'in_late';             // 7:00 PM (inclusive)\n  if (h >= 19 && h <= 23) return 'in_brutally_late';     // 7:01–11:59 PM\n  return 'in_early';                                      // midnight–5:59 PM\n}\n\n// OUT bucketing. Post-midnight (h < 12) = overtime; 10:30–11:59 PM = on time; else = early.\nfunction classifyOut(dt) {\n  const h = dt.hour, m = dt.minute;\n  if ((h === 22 && m >= 30) || h === 23) return 'out_ontime';\n  if (h >= 0 && h < 12) return 'out_overtime';\n  return 'out_early';\n}\n\nfunction buildInStatus(shiftType, dt) {\n  const tm = dt.hour * 60 + dt.minute;\n  if (shiftType === 'in_early') {\n    // Hours are flexible against a five-hour target: starting early and\n    // finishing early is a normal day, not something to flag. This briefly\n    // showed an amber \"VERY EARLY\" warning, which told someone working\n    // exactly as intended that they had done something wrong.\n    return { label: 'STARTED EARLY', cls: 'status-info' };\n  }\n  if (shiftType === 'in_ontime') return { label: 'ON TIME', cls: 'status-good' };\n  if (shiftType === 'in_late') {\n    return { label: fmtMins(tm - 18*60) + ' LATE', cls: 'status-bad' };\n  }\n  return { label: 'BRUTALLY LATE (' + fmtMins(tm - 18*60) + ' PAST SHIFT)', cls: 'status-bad' };\n}\n\nfunction buildOutStatus(outShiftCategory, dt) {\n  const ob = classifyOut(dt);\n  const tm = dt.hour * 60 + dt.minute;\n  if (ob === 'out_early') {\n    const diff = (22*60 + 30) - tm;\n    return { label: 'EARLY OUT (' + fmtMins(diff) + ' BEFORE)', cls: 'status-info' };\n  }\n  if (ob === 'out_ontime') return { label: 'ON TIME', cls: 'status-good' };\n  // overtime — minutes past 11:00 PM. Post-midnight = 60 + tm; else = tm - 23*60.\n  let diff;\n  if (dt.hour < 12) diff = 60 + tm;\n  else diff = tm - 23*60;\n  return { label: 'OVERTIME (+' + fmtMins(diff) + ')', cls: 'status-warn' };\n}\n\nfunction inBadge(shiftType) {\n  if (shiftType === 'in_brutally_late') return { label: 'Brutally Late In', cls: 'badge-err' };\n  return { label: 'Clock In', cls: 'badge-in' };\n}\n\nfunction outBadge(outShiftCategory) {\n  if (outShiftCategory === 'brutally_late') return { label: 'Brutally Late Out', cls: 'badge-err' };\n  return { label: 'Clock Out', cls: 'badge-out' };\n}\n\nfunction inSubtitle(shiftType) {\n  if (shiftType === 'in_brutally_late') return 'You are well past shift start. Show up on time tomorrow.';\n  return 'Your scan was recorded.';\n}\n\nfunction outSubtitle(outShiftCategory) {\n  if (outShiftCategory === 'brutally_late') return 'Late in, recorded out. Show up on time tomorrow.';\n  return 'Your scan was recorded.';\n}\n\nfunction roundMin(mins) {\n  // round to nearest hour; round up when within 20 min of the next hour (>=40 min in)\n  const base = Math.floor(mins / 60);\n  return (mins % 60) >= 40 ? base + 1 : base;\n}\n// A row left open longer than this is a forgotten clock-out, not somebody\n// still working. A 2:26 AM scan closed at 4:58 PM once wrote 14 hours nobody\n// worked, and there was no signal until payroll.\nconst STALE_SHIFT_HOURS = 12;\n\nfunction computeTotalHours(inDt, outDt) {\n  // Every hour on the clock is paid. No fixed shift length, no window and no\n  // cap — the total is simply clock-out minus clock-in, rounded to the hour.\n  const workedMin = Math.max(0, Math.round(outDt.diff(inDt, 'minutes').minutes));\n  return roundMin(workedMin);\n}\n\nfunction hoursLabel(h) {\n  return h + (h === 1 ? ' hour' : ' hours');\n}\n\nfunction parseInDt(dateStr, timeStr) {\n  const formats = ['yyyy-MM-dd h:mm:ss a', 'MM/dd/yyyy h:mm:ss a', 'M/d/yyyy h:mm:ss a', 'yyyy-MM-dd h:mm a', 'MM/dd/yyyy h:mm a', 'M/d/yyyy h:mm a', 'yyyy-MM-dd HH:mm:ss', 'MM/dd/yyyy HH:mm:ss', 'yyyy-MM-dd HH:mm', 'MM/dd/yyyy HH:mm'];\n  for (const fmt of formats) {\n    const dt = DateTime.fromFormat(String(dateStr) + ' ' + String(timeStr), fmt, { zone: 'Asia/Manila' });\n    if (dt.isValid) return dt;\n  }\n  return null;\n}\n\n// Nothing is recorded without a tap. A code that punches the moment it\n// loads means anything which merely fetches the link -- a crawler, a chat\n// app's link preview, a restored browser tab -- records a shift. Google\n// did exactly that three times in seven seconds one night, and the\n// phantom row locked out the next real scan for fourteen hours.\n//\n// It also removes the second failure: there is one code now, and the\n// direction is chosen by tapping rather than by which card was picked up.\nif (!confirmed) {\n  const openNow = findOpenRows();\n  // Only today's open row means 'you are clocked in'. A row left open\n  // yesterday must not turn today's scan into a clock-out -- that is what\n  // walked someone into closing the wrong day.\n  if (openNow.length > 0 && openedToday(openNow[openNow.length - 1].Date)) {\n    const row = openNow[openNow.length - 1];\n    const inDt = parseInDt(row.Date, row.Time_in);\n    const mins = inDt ? Math.max(0, Math.round(now.diff(inDt, 'minutes').minutes)) : 0;\n    return [{ json: {\n      operation: 'choose',\n      choose_mode: 'out',\n      display_employee: employeeName,\n      display_employee_id: empId,\n      display_ident: ident,\n      display_time_in: row.Time_in,\n      display_elapsed: fmtMins(mins),\n      display_target: inDt ? inDt.plus({ hours: TARGET_HOURS }).toFormat('h:mm a') : ''\n    } }];\n  }\n  const forgotten = openNow.length > 0 ? openNow[openNow.length - 1] : null;\n  return [{ json: {\n    operation: 'choose',\n    choose_mode: 'in',\n    // Named, not touched. Fixing it is a decision for the sheet, not\n    // something to do to a payroll row on someone's way through a door.\n    display_stale: forgotten\n      ? forgotten.Date + ' was left open at ' + forgotten.Time_in\n      : '',\n    display_employee: employeeName,\n    display_employee_id: empId,\n    display_ident: ident,\n    display_time: timeStr,\n    display_target: targetOutStr\n  } }];\n}\n\nif (action === 'in') {\n  const openRows = findOpenRows();\n  // Clocking in clocks you in. Yesterday's unclosed row is left exactly as\n  // it is -- it gets fixed in the sheet, not by refusing today's shift.\n  if (openRows.length > 0 && openedToday(openRows[openRows.length - 1].Date)) {\n    const openRow = openRows[openRows.length - 1];\n    return [{ json: {\n      operation: 'no_clock_out',\n      display_employee: employeeName,\n      display_date: openRow.Date,\n      display_time_in: openRow.Time_in\n    } }];\n  }\n  const shiftType = classifyIn(now);\n  let pool;\n  if (shiftType === 'in_early') pool = VERSES.in_early;\n  else if (shiftType === 'in_ontime') pool = VERSES.in_ontime;\n  else pool = VERSES.in_late;\n  const v = pickVerse(pool);\n  const s = buildInStatus(shiftType, now);\n  const b = inBadge(shiftType);\n  return [{ json: {\n    operation: 'append',\n    Date: dateStr,\n    Employee: employeeName,\n    Time_in: timeStr,\n    Time_out: '',\n    Total_hours: '',\n    display_employee: employeeName,\n    display_time: timeStr,\n    display_target_time: targetOutStr,\n    display_badge_label: b.label,\n    display_badge_class: b.cls,\n    display_subtitle: inSubtitle(shiftType),\n    display_status_label: s.label,\n    display_status_class: s.cls,\n    display_verse_text: v.text,\n    display_verse_ref: v.ref,\n    display_verse_meaning: v.meaning,\n    display_shift_type: shiftType\n  } }];\n}\n\nif (action === 'out') {\n  const open = findOpenRows();\n  if (open.length === 0) {\n    return [{ json: { operation: 'no_clock_in', display_employee: employeeName } }];\n  }\n  const row = open[open.length - 1];\n  const inDt = parseInDt(row.Date, row.Time_in);\n  if (!inDt) {\n    return [{ json: { operation: 'no_clock_in', display_employee: employeeName } }];\n  }\n  const inShift = classifyIn(inDt);\n  const outBucket = classifyOut(now);\n\n  const outCat = inShift === 'in_brutally_late' ? 'brutally_late' : 'regular';\n\n  // Refuse to invent a total for an implausible span. The row still closes —\n  // otherwise the next person stays locked out — but Total_hours is left\n  // blank so the dashboard flags it rather than paying a number nobody\n  // worked. Guessing the real clock-out time would be worse than blank.\n  const workedMin = Math.max(0, Math.round(now.diff(inDt, 'minutes').minutes));\n  const stale = workedMin > STALE_SHIFT_HOURS * 60;\n  const totalHours = stale ? '' : computeTotalHours(inDt, now);\n\n  let pool;\n  if (outCat === 'brutally_late') pool = VERSES.out_late;\n  else if (outBucket === 'out_early') pool = VERSES.out_early;\n  else if (outBucket === 'out_ontime') pool = VERSES.out_ontime;\n  else pool = VERSES.out_late;\n  const v = pickVerse(pool);\n\n  const s = stale\n    ? { label: 'SHIFT LEFT OPEN — TOTAL NOT SET', cls: 'status-warn' }\n    : buildOutStatus(outCat, now);\n  const b = outBadge(outCat);\n\n  return [{ json: {\n    operation: 'update',\n    row_number: row.row_number,\n    Date: row.Date,\n    Employee: employeeName,\n    Time_out: timeStr,\n    Total_hours: totalHours,\n    display_employee: employeeName,\n    display_time: timeStr,\n    display_total: stale ? 'Needs checking' : hoursLabel(totalHours),\n    display_total_label: stale ? 'Left Open Since ' + row.Time_in : 'Total Time',\n    display_badge_label: b.label,\n    display_badge_class: b.cls,\n    display_subtitle: outSubtitle(outCat),\n    display_status_label: s.label,\n    display_status_class: s.cls,\n    display_verse_text: v.text,\n    display_verse_ref: v.ref,\n    display_verse_meaning: v.meaning,\n    display_shift_type: outCat\n  } }];\n}\n\nreturn [{ json: { operation: 'no_clock_in', display_employee: 'Unknown' } }];\n",
         "language": "javaScript",
         "mode": "runOnceForAllItems"
       },
@@ -242,6 +254,78 @@
                     "rightValue": "no_clock_out",
                     "id": "9d3f1a55-7e2b-44c4-9c1a-1f7b6a2d4e88",
                     "leftValue": "={{ $json.operation }}"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "unknown_employee",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "version": 2,
+                  "typeValidation": "loose",
+                  "leftValue": "",
+                  "caseSensitive": true
+                },
+                "conditions": [
+                  {
+                    "operator": {
+                      "operation": "equals",
+                      "type": "string"
+                    },
+                    "rightValue": "unknown_employee",
+                    "id": "c3f0a1d2-88be-4e77-9a10-5b6d2e8f4a91",
+                    "leftValue": "={{ $json.operation }}"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "choose",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "version": 2,
+                  "typeValidation": "loose",
+                  "leftValue": "",
+                  "caseSensitive": true
+                },
+                "conditions": [
+                  {
+                    "operator": {
+                      "operation": "equals",
+                      "type": "string"
+                    },
+                    "rightValue": "choose",
+                    "id": "choose-rule",
+                    "leftValue": "={{ $json.operation }}"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "ask_pin",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "version": 2,
+                  "typeValidation": "loose",
+                  "leftValue": "",
+                  "caseSensitive": true
+                },
+                "conditions": [
+                  {
+                    "id": "ask-pin-rule",
+                    "leftValue": "={{ $json.operation }}",
+                    "rightValue": "ask_pin",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
                   }
                 ],
                 "combinator": "and"
@@ -462,7 +546,7 @@
         -160
       ],
       "parameters": {
-        "responseBody": "=<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><meta name=\"theme-color\" content=\"#0f172a\"><title>{{ $('Decide').item.json.display_employee }} clocked in</title><style>*{box-sizing:border-box;margin:0;padding:0}html,body{min-height:100%}body{font-family:-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,sans-serif;background:#0f172a;color:#e2e8f0;display:flex;align-items:center;justify-content:center;min-height:100vh;min-height:100dvh;padding:max(1rem,env(safe-area-inset-top)) max(1rem,env(safe-area-inset-right)) max(1rem,env(safe-area-inset-bottom)) max(1rem,env(safe-area-inset-left));line-height:1.5;-webkit-font-smoothing:antialiased;-webkit-text-size-adjust:100%}.card{background:#1e293b;border:1px solid #334155;border-radius:1.5rem;padding:clamp(1.75rem,6vw,3rem) clamp(1.25rem,5vw,2.5rem);width:100%;max-width:30rem;box-shadow:0 14px 40px rgba(0,0,0,.5);text-align:center;margin:auto}.badge{display:inline-block;padding:.7rem 1.4rem;border-radius:999px;color:#fff;font-size:clamp(.95rem,3.5vw,1.1rem);font-weight:700;letter-spacing:.12em;text-transform:uppercase}.badge-in{background:#16a34a}.badge-out{background:#2563eb}.badge-warn{background:#d97706}.badge-err{background:#dc2626}h1{font-size:clamp(1.75rem,7vw,2.5rem);font-weight:600;margin:1.5rem 0 .5rem;color:#f1f5f9;line-height:1.2;word-break:break-word}.subtitle{color:#94a3b8;font-size:clamp(1rem,4vw,1.15rem);margin-bottom:1.5rem}.row{display:flex;justify-content:space-between;align-items:center;gap:1rem;padding:1.1rem 0;border-top:1px solid #334155;font-size:clamp(1rem,4vw,1.15rem);text-align:left}.row:last-child{border-bottom:1px solid #334155}.label{color:#94a3b8;font-size:clamp(.8rem,3vw,.95rem);text-transform:uppercase;letter-spacing:.05em;flex-shrink:0}.value{color:#f8fafc;font-weight:600;text-align:right;word-break:break-word;font-variant-numeric:tabular-nums}.msg{color:#cbd5e1;font-size:clamp(1rem,4vw,1.1rem);margin-top:1rem;line-height:1.55}.msg strong{color:#f1f5f9}.verse{margin-top:1.5rem;padding-top:1.25rem;border-top:1px solid #334155;color:#cbd5e1;font-style:italic;font-size:clamp(.95rem,3.5vw,1.05rem);line-height:1.6;text-align:center}.verse-ref{display:block;margin-top:.5rem;font-style:normal;font-weight:600;color:#94a3b8;font-size:clamp(.8rem,3vw,.9rem);letter-spacing:.03em}.status{display:inline-block;padding:.45rem 1rem;border-radius:999px;font-size:clamp(.78rem,3vw,.92rem);font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin:0 0 1.25rem 0;border:1px solid transparent}.status-good{background:rgba(22,163,74,.15);color:#4ade80;border-color:rgba(22,163,74,.45)}.status-warn{background:rgba(217,119,6,.18);color:#fbbf24;border-color:rgba(217,119,6,.45)}.status-bad{background:rgba(220,38,38,.16);color:#f87171;border-color:rgba(220,38,38,.45)}.status-info{background:rgba(37,99,235,.16);color:#60a5fa;border-color:rgba(37,99,235,.45)}.verse-meaning{display:block;margin-top:.85rem;font-style:normal;font-weight:400;color:#94a3b8;font-size:clamp(.85rem,3.2vw,.95rem);line-height:1.5}</style></head><body><main class=\"card\"><span class=\"badge {{ $('Decide').item.json.display_badge_class }}\">{{ $('Decide').item.json.display_badge_label }}</span><h1>{{ $('Decide').item.json.display_employee }}</h1><p class=\"subtitle\">{{ $('Decide').item.json.display_subtitle }}</p><div class=\"status {{ $('Decide').item.json.display_status_class }}\">{{ $('Decide').item.json.display_status_label }}</div><div class=\"row\"><span class=\"label\">Time In</span><span class=\"value\">{{ $('Decide').item.json.display_time }}</span></div><div class=\"verse\">&ldquo;{{ $('Decide').item.json.display_verse_text }}&rdquo;<span class=\"verse-ref\">&mdash; {{ $('Decide').item.json.display_verse_ref }}</span><span class=\"verse-meaning\">{{ $('Decide').item.json.display_verse_meaning }}</span></div></main></body></html>",
+        "responseBody": "=<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><meta name=\"theme-color\" content=\"#0f172a\"><title>{{ $('Decide').item.json.display_employee }} clocked in</title><style>*{box-sizing:border-box;margin:0;padding:0}html,body{min-height:100%}body{font-family:-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,sans-serif;background:#0f172a;color:#e2e8f0;display:flex;align-items:center;justify-content:center;min-height:100vh;min-height:100dvh;padding:max(1rem,env(safe-area-inset-top)) max(1rem,env(safe-area-inset-right)) max(1rem,env(safe-area-inset-bottom)) max(1rem,env(safe-area-inset-left));line-height:1.5;-webkit-font-smoothing:antialiased;-webkit-text-size-adjust:100%}.card{background:#1e293b;border:1px solid #334155;border-radius:1.5rem;padding:clamp(1.75rem,6vw,3rem) clamp(1.25rem,5vw,2.5rem);width:100%;max-width:30rem;box-shadow:0 14px 40px rgba(0,0,0,.5);text-align:center;margin:auto}.badge{display:inline-block;padding:.7rem 1.4rem;border-radius:999px;color:#fff;font-size:clamp(.95rem,3.5vw,1.1rem);font-weight:700;letter-spacing:.12em;text-transform:uppercase}.badge-in{background:#16a34a}.badge-out{background:#2563eb}.badge-warn{background:#d97706}.badge-err{background:#dc2626}h1{font-size:clamp(1.75rem,7vw,2.5rem);font-weight:600;margin:1.5rem 0 .5rem;color:#f1f5f9;line-height:1.2;word-break:break-word}.subtitle{color:#94a3b8;font-size:clamp(1rem,4vw,1.15rem);margin-bottom:1.5rem}.row{display:flex;justify-content:space-between;align-items:center;gap:1rem;padding:1.1rem 0;border-top:1px solid #334155;font-size:clamp(1rem,4vw,1.15rem);text-align:left}.row:last-child{border-bottom:1px solid #334155}.label{color:#94a3b8;font-size:clamp(.8rem,3vw,.95rem);text-transform:uppercase;letter-spacing:.05em;flex-shrink:0}.value{color:#f8fafc;font-weight:600;text-align:right;word-break:break-word;font-variant-numeric:tabular-nums}.msg{color:#cbd5e1;font-size:clamp(1rem,4vw,1.1rem);margin-top:1rem;line-height:1.55}.msg strong{color:#f1f5f9}.verse{margin-top:1.5rem;padding-top:1.25rem;border-top:1px solid #334155;color:#cbd5e1;font-style:italic;font-size:clamp(.95rem,3.5vw,1.05rem);line-height:1.6;text-align:center}.verse-ref{display:block;margin-top:.5rem;font-style:normal;font-weight:600;color:#94a3b8;font-size:clamp(.8rem,3vw,.9rem);letter-spacing:.03em}.status{display:inline-block;padding:.45rem 1rem;border-radius:999px;font-size:clamp(.78rem,3vw,.92rem);font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin:0 0 1.25rem 0;border:1px solid transparent}.status-good{background:rgba(22,163,74,.15);color:#4ade80;border-color:rgba(22,163,74,.45)}.status-warn{background:rgba(217,119,6,.18);color:#fbbf24;border-color:rgba(217,119,6,.45)}.status-bad{background:rgba(220,38,38,.16);color:#f87171;border-color:rgba(220,38,38,.45)}.status-info{background:rgba(37,99,235,.16);color:#60a5fa;border-color:rgba(37,99,235,.45)}.verse-meaning{display:block;margin-top:.85rem;font-style:normal;font-weight:400;color:#94a3b8;font-size:clamp(.85rem,3.2vw,.95rem);line-height:1.5}</style></head><body><main class=\"card\"><span class=\"badge {{ $('Decide').item.json.display_badge_class }}\">{{ $('Decide').item.json.display_badge_label }}</span><h1>{{ $('Decide').item.json.display_employee }}</h1><p class=\"subtitle\">{{ $('Decide').item.json.display_subtitle }}</p><div class=\"status {{ $('Decide').item.json.display_status_class }}\">{{ $('Decide').item.json.display_status_label }}</div><div class=\"row\"><span class=\"label\">Time In</span><span class=\"value\">{{ $('Decide').item.json.display_time }}</span></div><p class=\"msg\">Stay until <strong>{{ $('Decide').item.json.display_target_time }}</strong> for a full 5 hours. You have not clocked out yet &mdash; scan again when you leave.</p><div class=\"verse\">&ldquo;{{ $('Decide').item.json.display_verse_text }}&rdquo;<span class=\"verse-ref\">&mdash; {{ $('Decide').item.json.display_verse_ref }}</span><span class=\"verse-meaning\">{{ $('Decide').item.json.display_verse_meaning }}</span></div></main></body></html>",
         "respondWith": "text",
         "options": {
           "responseCode": 200,
@@ -581,13 +665,13 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "https://sheets.googleapis.com/v4/spreadsheets/YOUR_SPREADSHEET_ID/values/Sheet2!A1:A1000?majorDimension=COLUMNS",
+        "url": "https://sheets.googleapis.com/v4/spreadsheets/YOUR_SPREADSHEET_ID/values:batchGet?ranges=Sheet2!A:A&ranges=Sheet2!1:2&majorDimension=ROWS",
         "authentication": "predefinedCredentialType",
         "nodeCredentialType": "googleSheetsOAuth2Api",
         "options": {}
       },
       "id": "520ab189-5851-4f71-b757-33febe0f50be",
-      "name": "Read Pivot Dates",
+      "name": "Read Pivot Layout",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
@@ -604,7 +688,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const SHEET_ID = 1545975491;                 // pivot tab \"Sheet2\"\nconst COLS = {\n  Ivan:   { in: 1, out: 2, total: 7 },\n  Daniel: { in: 3, out: 4, total: 8 },\n};\nconst DATE_COL = 0;\n\n// Normalize any supported date string to zero-padded MM/DD/YYYY, else null.\nfunction normDate(s) {\n  const t = String(s == null ? '' : s).trim();\n  let m = t.match(/^(\\d{1,2})\\/(\\d{1,2})\\/(\\d{4})$/);\n  if (m) return m[1].padStart(2, '0') + '/' + m[2].padStart(2, '0') + '/' + m[3];\n  m = t.match(/^(\\d{4})-(\\d{1,2})-(\\d{1,2})$/);\n  if (m) return m[2].padStart(2, '0') + '/' + m[3].padStart(2, '0') + '/' + m[1];\n  return null;\n}\n\nfunction cell(rowIndex, colIndex, value, kind) {\n  const userEnteredValue = kind === 'number'\n    ? { numberValue: Number(value) }\n    : { stringValue: String(value) };\n  return {\n    updateCells: {\n      range: {\n        sheetId: SHEET_ID,\n        startRowIndex: rowIndex, endRowIndex: rowIndex + 1,\n        startColumnIndex: colIndex, endColumnIndex: colIndex + 1,\n      },\n      rows: [{ values: [{ userEnteredValue }] }],\n      fields: 'userEnteredValue',\n    },\n  };\n}\n\nfunction has(v) { return v !== undefined && v !== null && v !== ''; }\n\n// decideItems: the canonical clock event(s) from the Decide node.\n// colA: pivot column A values (index 0 = sheet row 1), used to find the row.\nfunction buildPivotItems(decideItems, colA) {\n  // Map normalized date -> 0-based row index; track the last dated row.\n  const dateToRow = new Map();\n  let lastDatedRow = -1;\n  for (let i = 0; i < colA.length; i++) {\n    const nd = normDate(colA[i]);\n    if (nd) {\n      if (!dateToRow.has(nd)) dateToRow.set(nd, i);\n      lastDatedRow = i;\n    }\n  }\n  // No dates found at all => treat as a failed/empty read and skip, so we never\n  // append duplicate rows when the pivot lookup is unavailable.\n  if (dateToRow.size === 0) return [];\n\n  const out = [];\n  for (const item of decideItems) {\n    const j = item.json;\n    const cols = COLS[j.display_employee || j.Employee];\n    if (!cols) continue;                       // not Ivan/Daniel -> skip (e.g. Nae)\n    const nd = normDate(j.Date);\n    if (!nd) continue;\n\n    let rowIndex;\n    let isNewRow = false;\n    if (dateToRow.has(nd)) {\n      rowIndex = dateToRow.get(nd);\n    } else {\n      rowIndex = lastDatedRow + 1;             // append just after the last date\n      isNewRow = true;\n    }\n\n    const requests = [];\n    if (isNewRow) requests.push(cell(rowIndex, DATE_COL, nd, 'string'));\n    if (j.operation === 'append') {\n      if (has(j.Time_in)) requests.push(cell(rowIndex, cols.in, j.Time_in, 'string'));\n    } else if (j.operation === 'update') {\n      if (has(j.Time_out))      requests.push(cell(rowIndex, cols.out,       j.Time_out,      'string'));\n      if (has(j.Total_hours))   requests.push(cell(rowIndex, cols.total,     j.Total_hours,   'number'));\n    }\n    if (requests.length) out.push({ json: { body: { requests } } });\n  }\n  return out;\n}\n\nconst __pd = $('Read Pivot Dates').first().json;\nconst __colA = (__pd && __pd.values && __pd.values[0]) || [];\nreturn buildPivotItems($('Decide').all(), __colA);\n"
+        "jsCode": "const SHEET_ID = 1545975491;                 // pivot tab \"Sheet2\"\nconst DATE_COL = 0;\n\n// Columns are found by their headers, not listed here. A name list in this\n// node meant everyone added after it was written -- Jeremy, then whoever\n// next -- was silently left out of the pivot. Row 1 carries each person's\n// name over their In/Out pair; row 2 carries \"In\", \"Out\" and\n// \"Total Hours of <name>\".\nconst HEADER_NAME_ROW = 0;\nconst HEADER_LABEL_ROW = 1;\n\n// Normalize any supported date string to zero-padded MM/DD/YYYY, else null.\nfunction normDate(s) {\n  const t = String(s == null ? '' : s).trim();\n  let m = t.match(/^(\\d{1,2})\\/(\\d{1,2})\\/(\\d{4})$/);\n  if (m) return m[1].padStart(2, '0') + '/' + m[2].padStart(2, '0') + '/' + m[3];\n  m = t.match(/^(\\d{4})-(\\d{1,2})-(\\d{1,2})$/);\n  if (m) return m[2].padStart(2, '0') + '/' + m[3].padStart(2, '0') + '/' + m[1];\n  return null;\n}\n\nconst norm = (v) => String(v == null ? '' : v).trim().toLowerCase();\n\nfunction cell(rowIndex, colIndex, value, kind) {\n  const userEnteredValue = kind === 'number'\n    ? { numberValue: Number(value) }\n    : { stringValue: String(value) };\n  return {\n    updateCells: {\n      range: {\n        sheetId: SHEET_ID,\n        startRowIndex: rowIndex, endRowIndex: rowIndex + 1,\n        startColumnIndex: colIndex, endColumnIndex: colIndex + 1,\n      },\n      rows: [{ values: [{ userEnteredValue }] }],\n      fields: 'userEnteredValue',\n    },\n  };\n}\n\nfunction gridRange(r0, r1, c0, c1) {\n  return { sheetId: SHEET_ID, startRowIndex: r0, endRowIndex: r1, startColumnIndex: c0, endColumnIndex: c1 };\n}\n\nfunction has(v) { return v !== undefined && v !== null && v !== ''; }\n\n// Where a person's three columns are, or null for any that is missing.\nfunction findColumns(name, nameRow, labelRow) {\n  const want = norm(name);\n  let pair = -1;\n  for (let c = 1; c < nameRow.length; c++) {\n    if (norm(nameRow[c]) === want && norm(labelRow[c]) === 'in' && norm(labelRow[c + 1]) === 'out') {\n      pair = c;\n      break;\n    }\n  }\n  let total = -1;\n  for (let c = 1; c < labelRow.length; c++) {\n    if (norm(labelRow[c]) === 'total hours of ' + want) { total = c; break; }\n  }\n  return { in: pair === -1 ? null : pair, out: pair === -1 ? null : pair + 1, total: total === -1 ? null : total };\n}\n\n// Somebody with no columns gets them on their first scan, appended past the\n// last used column. Appending rather than inserting beside the others is the\n// point: nothing existing moves, so no historical cell and no hand-written\n// formula in this tab ever shifts under anybody.\nfunction provision(name, cols, firstFreeCol) {\n  const requests = [];\n  let next = firstFreeCol;\n  const width = (cols.in === null ? 2 : 0) + (cols.total === null ? 1 : 0);\n  // Room at the grid's edge. Costs a few empty columns once per new person;\n  // writing past the edge would fail the whole batch, and with it the scan's\n  // pivot write, on every scan until somebody noticed.\n  requests.push({ appendDimension: { sheetId: SHEET_ID, dimension: 'COLUMNS', length: width } });\n\n  if (cols.in === null) {\n    // Look like the existing pairs: borrow Ivan's header formatting (B1:C2).\n    requests.push({ copyPaste: {\n      source: gridRange(0, 2, 1, 3),\n      destination: gridRange(0, 2, next, next + 2),\n      pasteType: 'PASTE_FORMAT',\n    } });\n    requests.push(cell(HEADER_NAME_ROW, next, name, 'string'));\n    requests.push(cell(HEADER_LABEL_ROW, next, 'In', 'string'));\n    requests.push(cell(HEADER_LABEL_ROW, next + 1, 'Out', 'string'));\n    cols = { ...cols, in: next, out: next + 1 };\n    next += 2;\n  }\n  if (cols.total === null) {\n    requests.push(cell(HEADER_LABEL_ROW, next, 'Total Hours of ' + name, 'string'));\n    cols = { ...cols, total: next };\n    next += 1;\n  }\n  return { requests, cols };\n}\n\n// decideItems: the canonical clock event(s) from the Decide node.\n// colA: pivot column A values (index 0 = sheet row 1), used to find the row.\n// header: rows 1 and 2 of the pivot, used to find (or make) the columns.\nfunction buildPivotItems(decideItems, colA, header) {\n  // Map normalized date -> 0-based row index; track the last dated row.\n  const dateToRow = new Map();\n  let lastDatedRow = -1;\n  for (let i = 0; i < colA.length; i++) {\n    const nd = normDate(colA[i]);\n    if (nd) {\n      if (!dateToRow.has(nd)) dateToRow.set(nd, i);\n      lastDatedRow = i;\n    }\n  }\n  const nameRow = header[HEADER_NAME_ROW] || [];\n  const labelRow = header[HEADER_LABEL_ROW] || [];\n  // No dates, or no header, => treat as a failed/empty read and skip, so we\n  // never append duplicate rows or columns when the lookup is unavailable.\n  if (dateToRow.size === 0 || norm(labelRow[DATE_COL]) !== 'date') return [];\n\n  let firstFreeCol = Math.max(nameRow.length, labelRow.length);\n\n  const out = [];\n  for (const item of decideItems) {\n    const j = item.json;\n    const name = String(j.display_employee || j.Employee || '').trim();\n    if (!name) continue;\n    const nd = normDate(j.Date);\n    if (!nd) continue;\n\n    const requests = [];\n    let cols = findColumns(name, nameRow, labelRow);\n    if (cols.in === null || cols.total === null) {\n      const made = provision(name, cols, firstFreeCol);\n      requests.push(...made.requests);\n      cols = made.cols;\n      firstFreeCol = Math.max(firstFreeCol, (cols.total ?? 0) + 1, (cols.out ?? 0) + 1);\n    }\n\n    let rowIndex;\n    let isNewRow = false;\n    if (dateToRow.has(nd)) {\n      rowIndex = dateToRow.get(nd);\n    } else {\n      rowIndex = lastDatedRow + 1;             // append just after the last date\n      isNewRow = true;\n    }\n\n    if (isNewRow) requests.push(cell(rowIndex, DATE_COL, nd, 'string'));\n    if (j.operation === 'append') {\n      if (has(j.Time_in)) requests.push(cell(rowIndex, cols.in, j.Time_in, 'string'));\n    } else if (j.operation === 'update') {\n      if (has(j.Time_out))      requests.push(cell(rowIndex, cols.out,       j.Time_out,      'string'));\n      if (has(j.Total_hours))   requests.push(cell(rowIndex, cols.total,     j.Total_hours,   'number'));\n    }\n    if (requests.length) out.push({ json: { body: { requests } } });\n  }\n  return out;\n}\n\n// One batchGet: [0] is column A (dates), [1] is header rows 1-2.\nconst __ranges = ($('Read Pivot Layout').first().json.valueRanges) || [];\nconst __colA = ((__ranges[0] && __ranges[0].values) || []).map((r) => (r && r[0]) || '');\nconst __header = (__ranges[1] && __ranges[1].values) || [];\nreturn buildPivotItems($('Decide').all(), __colA, __header);\n"
       },
       "id": "b71b27b3-64d4-495b-8899-384137a16595",
       "name": "Build Pivot Cells",
@@ -641,6 +725,116 @@
         }
       },
       "onError": "continueRegularOutput"
+    },
+    {
+      "id": "b7c91e30-4a55-4d21-9f88-0c3a17e5d420",
+      "name": "Respond Unknown Employee",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1680,
+        760
+      ],
+      "parameters": {
+        "responseBody": "=<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><meta name=\"theme-color\" content=\"#0f172a\"><title>Not recognized</title><style>*{box-sizing:border-box;margin:0;padding:0}html,body{min-height:100%}body{font-family:-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,sans-serif;background:#0f172a;color:#e2e8f0;display:flex;align-items:center;justify-content:center;min-height:100vh;min-height:100dvh;padding:max(1rem,env(safe-area-inset-top)) max(1rem,env(safe-area-inset-right)) max(1rem,env(safe-area-inset-bottom)) max(1rem,env(safe-area-inset-left));line-height:1.5;-webkit-font-smoothing:antialiased;-webkit-text-size-adjust:100%}.card{background:#1e293b;border:1px solid #334155;border-radius:1.5rem;padding:clamp(1.75rem,6vw,3rem) clamp(1.25rem,5vw,2.5rem);width:100%;max-width:30rem;box-shadow:0 14px 40px rgba(0,0,0,.5);text-align:center;margin:auto}.badge{display:inline-block;padding:.7rem 1.4rem;border-radius:999px;color:#fff;font-size:clamp(.95rem,3.5vw,1.1rem);font-weight:700;letter-spacing:.12em;text-transform:uppercase}.badge-in{background:#16a34a}.badge-out{background:#2563eb}.badge-warn{background:#d97706}.badge-err{background:#dc2626}h1{font-size:clamp(1.75rem,7vw,2.5rem);font-weight:600;margin:1.5rem 0 .5rem;color:#f1f5f9;line-height:1.2;word-break:break-word}.subtitle{color:#94a3b8;font-size:clamp(1rem,4vw,1.15rem);margin-bottom:1.5rem}.row{display:flex;justify-content:space-between;align-items:center;gap:1rem;padding:1.1rem 0;border-top:1px solid #334155;font-size:clamp(1rem,4vw,1.15rem);text-align:left}.row:last-child{border-bottom:1px solid #334155}.label{color:#94a3b8;font-size:clamp(.8rem,3vw,.95rem);text-transform:uppercase;letter-spacing:.05em;flex-shrink:0}.value{color:#f8fafc;font-weight:600;text-align:right;word-break:break-word;font-variant-numeric:tabular-nums}.msg{color:#cbd5e1;font-size:clamp(1rem,4vw,1.1rem);margin-top:1rem;line-height:1.55}.msg strong{color:#f1f5f9}</style><style>.act{display:block;width:100%;padding:1.1rem;margin-top:.85rem;border-radius:.9rem;font-size:clamp(1rem,4vw,1.15rem);font-weight:700;letter-spacing:.06em;text-transform:uppercase;text-decoration:none;text-align:center}.act-go{background:#16a34a;color:#fff}.act-out{background:#2563eb;color:#fff}.act-stay{background:transparent;color:#94a3b8;border:1px solid #334155}</style></head><body><main class=\"card\"><span class=\"badge badge-err\">Not recognized</span>{{ $('Decide').item.json.display_via_pin ? '<h1>That PIN did not match</h1><p class=\"msg\">Check the four digits and try again. If it still fails, ask your supervisor to look it up.</p><a class=\"act act-go\" href=\"?\">Try again</a>' : '<h1>This ID is not on the roster</h1><p class=\"msg\">We need both <code>employee_id</code> and a valid <code>action</code> (in or out). Please try again or contact your supervisor.</p>' }}</main></body></html>",
+        "respondWith": "text",
+        "options": {
+          "responseCode": 400,
+          "responseHeaders": {
+            "entries": [
+              {
+                "value": "text/html; charset=utf-8",
+                "name": "Content-Type"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "alwaysOutputData": true,
+      "id": "n-get-roster",
+      "name": "Get Roster",
+      "type": "n8n-nodes-base.googleSheets",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "YOUR_CREDENTIAL_NAME"
+        }
+      },
+      "typeVersion": 4.7,
+      "parameters": {
+        "operation": "read",
+        "sheetName": {
+          "__rl": true,
+          "value": 1782249890,
+          "mode": "list",
+          "cachedResultName": "Employees",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_SPREADSHEET_ID/edit?gid=1782249890#gid=1782249890"
+        },
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_SPREADSHEET_ID",
+          "mode": "list",
+          "cachedResultName": "Alpha Omega Time Log",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_SPREADSHEET_ID/edit"
+        },
+        "options": {}
+      },
+      "position": [
+        720,
+        -200
+      ]
+    },
+    {
+      "id": "n-respond-choose",
+      "name": "Respond Choose",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1680,
+        -260
+      ],
+      "parameters": {
+        "responseBody": "=<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><meta name=\"theme-color\" content=\"#0f172a\"><title>{{ $('Decide').item.json.display_employee }}</title><style>*{box-sizing:border-box;margin:0;padding:0}html,body{min-height:100%}body{font-family:-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,sans-serif;background:#0f172a;color:#e2e8f0;display:flex;align-items:center;justify-content:center;min-height:100vh;min-height:100dvh;padding:max(1rem,env(safe-area-inset-top)) max(1rem,env(safe-area-inset-right)) max(1rem,env(safe-area-inset-bottom)) max(1rem,env(safe-area-inset-left));line-height:1.5;-webkit-font-smoothing:antialiased;-webkit-text-size-adjust:100%}.card{background:#1e293b;border:1px solid #334155;border-radius:1.5rem;padding:clamp(1.75rem,6vw,3rem) clamp(1.25rem,5vw,2.5rem);width:100%;max-width:30rem;box-shadow:0 14px 40px rgba(0,0,0,.5);text-align:center;margin:auto}.badge{display:inline-block;padding:.7rem 1.4rem;border-radius:999px;color:#fff;font-size:clamp(.95rem,3.5vw,1.1rem);font-weight:700;letter-spacing:.12em;text-transform:uppercase}.badge-in{background:#16a34a}.badge-out{background:#2563eb}.badge-warn{background:#d97706}.badge-err{background:#dc2626}h1{font-size:clamp(1.75rem,7vw,2.5rem);font-weight:600;margin:1.5rem 0 .5rem;color:#f1f5f9;line-height:1.2;word-break:break-word}.subtitle{color:#94a3b8;font-size:clamp(1rem,4vw,1.15rem);margin-bottom:1.5rem}.row{display:flex;justify-content:space-between;align-items:center;gap:1rem;padding:1.1rem 0;border-top:1px solid #334155;font-size:clamp(1rem,4vw,1.15rem);text-align:left}.row:last-child{border-bottom:1px solid #334155}.label{color:#94a3b8;font-size:clamp(.8rem,3vw,.95rem);text-transform:uppercase;letter-spacing:.05em;flex-shrink:0}.value{color:#f8fafc;font-weight:600;text-align:right;word-break:break-word;font-variant-numeric:tabular-nums}.msg{color:#cbd5e1;font-size:clamp(1rem,4vw,1.1rem);margin-top:1rem;line-height:1.55}.msg strong{color:#f1f5f9}.verse{margin-top:1.5rem;padding-top:1.25rem;border-top:1px solid #334155;color:#cbd5e1;font-style:italic;font-size:clamp(.95rem,3.5vw,1.05rem);line-height:1.6;text-align:center}.verse-ref{display:block;margin-top:.5rem;font-style:normal;font-weight:600;color:#94a3b8;font-size:clamp(.8rem,3vw,.9rem);letter-spacing:.03em}.status{display:inline-block;padding:.45rem 1rem;border-radius:999px;font-size:clamp(.78rem,3vw,.92rem);font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin:0 0 1.25rem 0;border:1px solid transparent}.status-good{background:rgba(22,163,74,.15);color:#4ade80;border-color:rgba(22,163,74,.45)}.status-warn{background:rgba(217,119,6,.18);color:#fbbf24;border-color:rgba(217,119,6,.45)}.status-bad{background:rgba(220,38,38,.16);color:#f87171;border-color:rgba(220,38,38,.45)}.status-info{background:rgba(37,99,235,.16);color:#60a5fa;border-color:rgba(37,99,235,.45)}.verse-meaning{display:block;margin-top:.85rem;font-style:normal;font-weight:400;color:#94a3b8;font-size:clamp(.85rem,3.2vw,.95rem);line-height:1.5}</style><style>.act{display:block;width:100%;padding:1.1rem;margin-top:.85rem;border-radius:.9rem;font-size:clamp(1rem,4vw,1.15rem);font-weight:700;letter-spacing:.06em;text-transform:uppercase;text-decoration:none;text-align:center}.act-go{background:#16a34a;color:#fff}.act-out{background:#2563eb;color:#fff}.act-stay{background:transparent;color:#94a3b8;border:1px solid #334155}</style></head><body><main class=\"card\"><span class=\"badge badge-in\">{{ $('Decide').item.json.display_employee }}</span>{{ $('Decide').item.json.choose_mode === 'out' ? '<h1>Currently clocked in</h1><p class=\"subtitle\">Since ' + $('Decide').item.json.display_time_in + ' &middot; ' + $('Decide').item.json.display_elapsed + ' so far</p><div class=\"row\"><span class=\"label\">Five hours at</span><span class=\"value\">' + $('Decide').item.json.display_target + '</span></div><a class=\"act act-out\" href=\"?' + $('Decide').item.json.display_ident + '&action=out&confirm=1\">Clock out now</a><a class=\"act act-stay\" href=\"?' + $('Decide').item.json.display_ident + '\">Stay clocked in</a>' : '<h1>Not clocked in</h1>' + ($('Decide').item.json.display_stale ? '<p class=\"subtitle\" style=\"color:#fbbf24\">Note: ' + $('Decide').item.json.display_stale + ' &mdash; fix that row in the sheet.</p>' : '') + '<p class=\"subtitle\">It is ' + $('Decide').item.json.display_time + '</p><div class=\"row\"><span class=\"label\">Five hours ends</span><span class=\"value\">' + $('Decide').item.json.display_target + '</span></div><a class=\"act act-go\" href=\"?' + $('Decide').item.json.display_ident + '&action=in&confirm=1\">Clock in now</a>' }}<p class=\"msg\">Nothing is recorded until you tap.</p></main></body></html>",
+        "respondWith": "text",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "value": "text/html; charset=utf-8",
+                "name": "Content-Type"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "n-respond-ask-pin",
+      "name": "Respond Ask PIN",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1680,
+        -480
+      ],
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><meta name=\"theme-color\" content=\"#0f172a\"><title>Enter your PIN</title><style>*{box-sizing:border-box;margin:0;padding:0}html,body{min-height:100%}body{font-family:-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,sans-serif;background:#0f172a;color:#e2e8f0;display:flex;align-items:center;justify-content:center;min-height:100vh;min-height:100dvh;padding:max(1rem,env(safe-area-inset-top)) max(1rem,env(safe-area-inset-right)) max(1rem,env(safe-area-inset-bottom)) max(1rem,env(safe-area-inset-left));line-height:1.5;-webkit-font-smoothing:antialiased;-webkit-text-size-adjust:100%}.card{background:#1e293b;border:1px solid #334155;border-radius:1.5rem;padding:clamp(1.75rem,6vw,3rem) clamp(1.25rem,5vw,2.5rem);width:100%;max-width:30rem;box-shadow:0 14px 40px rgba(0,0,0,.5);text-align:center;margin:auto}.badge{display:inline-block;padding:.7rem 1.4rem;border-radius:999px;color:#fff;font-size:clamp(.95rem,3.5vw,1.1rem);font-weight:700;letter-spacing:.12em;text-transform:uppercase}.badge-in{background:#16a34a}.badge-out{background:#2563eb}.badge-warn{background:#d97706}.badge-err{background:#dc2626}h1{font-size:clamp(1.75rem,7vw,2.5rem);font-weight:600;margin:1.5rem 0 .5rem;color:#f1f5f9;line-height:1.2;word-break:break-word}.subtitle{color:#94a3b8;font-size:clamp(1rem,4vw,1.15rem);margin-bottom:1.5rem}.row{display:flex;justify-content:space-between;align-items:center;gap:1rem;padding:1.1rem 0;border-top:1px solid #334155;font-size:clamp(1rem,4vw,1.15rem);text-align:left}.row:last-child{border-bottom:1px solid #334155}.label{color:#94a3b8;font-size:clamp(.8rem,3vw,.95rem);text-transform:uppercase;letter-spacing:.05em;flex-shrink:0}.value{color:#f8fafc;font-weight:600;text-align:right;word-break:break-word;font-variant-numeric:tabular-nums}.msg{color:#cbd5e1;font-size:clamp(1rem,4vw,1.1rem);margin-top:1rem;line-height:1.55}.msg strong{color:#f1f5f9}.verse{margin-top:1.5rem;padding-top:1.25rem;border-top:1px solid #334155;color:#cbd5e1;font-style:italic;font-size:clamp(.95rem,3.5vw,1.05rem);line-height:1.6;text-align:center}.verse-ref{display:block;margin-top:.5rem;font-style:normal;font-weight:600;color:#94a3b8;font-size:clamp(.8rem,3vw,.9rem);letter-spacing:.03em}.status{display:inline-block;padding:.45rem 1rem;border-radius:999px;font-size:clamp(.78rem,3vw,.92rem);font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin:0 0 1.25rem 0;border:1px solid transparent}.status-good{background:rgba(22,163,74,.15);color:#4ade80;border-color:rgba(22,163,74,.45)}.status-warn{background:rgba(217,119,6,.18);color:#fbbf24;border-color:rgba(217,119,6,.45)}.status-bad{background:rgba(220,38,38,.16);color:#f87171;border-color:rgba(220,38,38,.45)}.status-info{background:rgba(37,99,235,.16);color:#60a5fa;border-color:rgba(37,99,235,.45)}.verse-meaning{display:block;margin-top:.85rem;font-style:normal;font-weight:400;color:#94a3b8;font-size:clamp(.85rem,3.2vw,.95rem);line-height:1.5}</style><style>.act{display:block;width:100%;padding:1.1rem;margin-top:.85rem;border-radius:.9rem;font-size:clamp(1rem,4vw,1.15rem);font-weight:700;letter-spacing:.06em;text-transform:uppercase;text-decoration:none;text-align:center}.act-go{background:#16a34a;color:#fff}.act-out{background:#2563eb;color:#fff}.act-stay{background:transparent;color:#94a3b8;border:1px solid #334155}</style><style>.pin{display:block;width:100%;margin-top:.5rem;padding:1rem;border-radius:.9rem;border:1px solid #334155;background:#0f172a;color:#f8fafc;text-align:center;font-size:2rem;letter-spacing:.6em;font-variant-numeric:tabular-nums}.pin:focus{outline:2px solid #16a34a;outline-offset:2px}</style></head><body><main class=\"card\"><span class=\"badge badge-in\">Alpha &amp; Omega</span><h1>Enter your PIN</h1><p class=\"subtitle\">Four digits. You choose clock in or out next.</p><form method=\"get\" action=\"\"><input class=\"pin\" name=\"pin\" type=\"password\" inputmode=\"numeric\" pattern=\"[0-9]{4}\" maxlength=\"4\" autocomplete=\"off\" required autofocus aria-label=\"Your four-digit PIN\"><button class=\"act act-go\" type=\"submit\" style=\"border:0;cursor:pointer\">Continue</button></form><p class=\"msg\">Nothing is recorded until you tap.</p></main></body></html>",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "value": "text/html; charset=utf-8",
+                "name": "Content-Type"
+              }
+            ]
+          }
+        }
+      }
     }
   ],
   "connections": {
@@ -670,7 +864,7 @@
       "main": [
         [
           {
-            "node": "Read All Rows",
+            "node": "Get Roster",
             "type": "main",
             "index": 0
           }
@@ -735,6 +929,27 @@
             "type": "main",
             "index": 0
           }
+        ],
+        [
+          {
+            "node": "Respond Unknown Employee",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Choose",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Ask PIN",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
@@ -747,7 +962,7 @@
             "index": 0
           },
           {
-            "node": "Read Pivot Dates",
+            "node": "Read Pivot Layout",
             "type": "main",
             "index": 0
           }
@@ -763,7 +978,7 @@
             "index": 0
           },
           {
-            "node": "Read Pivot Dates",
+            "node": "Read Pivot Layout",
             "type": "main",
             "index": 0
           }
@@ -781,7 +996,18 @@
         ]
       ]
     },
-    "Read Pivot Dates": {
+    "Get Roster": {
+      "main": [
+        [
+          {
+            "node": "Read All Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Pivot Layout": {
       "main": [
         [
           {
@@ -796,7 +1022,6 @@
   "settings": {
     "executionOrder": "v1",
     "callerPolicy": "workflowsFromSameOwner",
-    "availableInMCP": false,
-    "errorWorkflow": "rRTsQNBidIdyojy0"
+    "availableInMCP": false
   }
 }
