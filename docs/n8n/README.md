@@ -66,7 +66,9 @@ shift now totals the same way, so no path can leave hours unrecorded.
 ## Clocking in with a PIN
 
 The same webhook also opens with a PIN, so one shared code can serve everyone
-and a new hire can clock in without a printed card:
+and a new hire can clock in without a printed card. That shared QR is on the
+dashboard's Employees page, with a printable sheet at `/employees/qr` — both
+behind the page's password, since the code is the bare webhook link:
 
 | Request | What happens |
 |---|---|
